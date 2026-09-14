@@ -1,0 +1,6 @@
+{
+  "name": "Catatan BBM & Servis",
+  "description": "Aplikasi pencatatan pengisian BBM kendaraan dengan scan struk AI, analisis konsumsi km/l bulanan, notifikasi servis berkala, grafik pengeluaran, ekspor PDF/Excel, dan sinkronisasi Google Drive.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
