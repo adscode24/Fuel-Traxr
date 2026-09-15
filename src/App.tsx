@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { User } from "firebase/auth";
+import { Fuel, Loader2 } from "lucide-react";
 import {
   Vehicle,
   FuelRecord,
@@ -37,16 +38,24 @@ import { StatsDashboard } from "./components/StatsDashboard";
 import { BiayaPage } from "./components/BiayaPage";
 import { ReportPage } from "./components/ReportPage";
 import { SettingsPage } from "./components/SettingsPage";
-import { ReceiptScannerModal } from "./components/ReceiptScannerModal";
 import { ManualEntryModal } from "./components/ManualEntryModal";
 import { VehicleSelectorModal } from "./components/VehicleSelectorModal";
+import { LocationPermissionBanner } from "./components/LocationPermissionBanner";
+import { AuthModal } from "./components/AuthModal";
+import { AuthPage } from "./components/AuthPage";
+import { UserProfileModal } from "./components/UserProfileModal";
+import { getStoredUserLocation, UserLocationInfo } from "./services/locationService";
 
 export function App() {
+  // Auth state & loading
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+
   // Core Data States
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => getStoredVehicles());
   const [activeVehicleId, setActiveVehicleId] = useState<string>(() => {
     const list = getStoredVehicles();
-    return list[0]?.id || "veh-1";
+    return list[0]?.id || "";
   });
   const [records, setRecords] = useState<FuelRecord[]>(() => getStoredFuelRecords());
   const [services, setServices] = useState<ServiceItem[]>(() => getStoredServices());
@@ -68,13 +77,14 @@ export function App() {
 
   // UI Navigation & Modals - Default is "home" as requested
   const [activeTab, setActiveTab] = useState<NavTab>("home");
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FuelRecord | null>(null);
 
   // Google Drive, Spreadsheet & Auth State
-  const [user, setUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [autoSync, setAutoSync] = useState<boolean>(() => {
     return localStorage.getItem("bbm_auto_sync") !== "false";
   });
@@ -99,9 +109,10 @@ export function App() {
     const unsubscribe = initAuth(
       (u) => {
         setUser(u);
+        setAuthLoading(false);
         const scopedVehicles = getStoredVehicles(u.uid);
         setVehicles(scopedVehicles);
-        setActiveVehicleId(scopedVehicles[0]?.id || "veh-1");
+        setActiveVehicleId(scopedVehicles[0]?.id || "");
         setRecords(getStoredFuelRecords(u.uid));
         setServices(getStoredServices(u.uid));
         setServiceHistory(getStoredServiceHistory(u.uid));
@@ -109,9 +120,10 @@ export function App() {
       },
       () => {
         setUser(null);
+        setAuthLoading(false);
         const guestVehicles = getStoredVehicles(null);
         setVehicles(guestVehicles);
-        setActiveVehicleId(guestVehicles[0]?.id || "veh-1");
+        setActiveVehicleId(guestVehicles[0]?.id || "");
         setRecords(getStoredFuelRecords(null));
         setServices(getStoredServices(null));
         setServiceHistory(getStoredServiceHistory(null));
@@ -126,40 +138,35 @@ export function App() {
     localStorage.setItem("bbm_auto_sync", autoSync ? "true" : "false");
   }, [autoSync]);
 
-  // Active Vehicle Object
-  const activeVehicle = useMemo(() => {
+  // Active Vehicle Object (null if user has not registered any vehicle yet)
+  const activeVehicle = useMemo<Vehicle | null>(() => {
+    if (vehicles.length === 0) return null;
     const found = vehicles.find((v) => v.id === activeVehicleId);
     if (found) return found;
-    if (vehicles[0]) return vehicles[0];
-    return {
-      id: "veh-1",
-      name: "Kendaraan Saya",
-      type: "car" as const,
-      licensePlate: "",
-      currentOdometer: 0,
-      fuelTankCapacity: 45,
-      defaultFuelType: "Pertalite",
-    };
+    return vehicles[0] || null;
   }, [vehicles, activeVehicleId]);
 
   // Filter records for active vehicle, sorted newest first
   const activeVehicleRecords = useMemo(() => {
+    if (!activeVehicle) return [];
     return records
       .filter((r) => r.vehicleId === activeVehicle.id)
       .sort((a, b) => b.date.localeCompare(a.date) || b.odometer - a.odometer);
-  }, [records, activeVehicle.id]);
+  }, [records, activeVehicle]);
 
   // Filter services for active vehicle
   const activeVehicleServices = useMemo(() => {
+    if (!activeVehicle) return [];
     return services.filter((s) => s.vehicleId === activeVehicle.id);
-  }, [services, activeVehicle.id]);
+  }, [services, activeVehicle]);
 
   // Filter service history for active vehicle
   const activeVehicleServiceHistory = useMemo(() => {
+    if (!activeVehicle) return [];
     return serviceHistory
       .filter((h) => h.vehicleId === activeVehicle.id)
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [serviceHistory, activeVehicle.id]);
+  }, [serviceHistory, activeVehicle]);
 
   // Payload for Google Drive Sync
   const getFullPayload = useCallback((): SyncPayload => {
@@ -227,6 +234,13 @@ export function App() {
 
   // Add or Edit Fuel Record
   const handleSaveFuelRecord = (data: Partial<FuelRecord>) => {
+    if (!activeVehicle && vehicles.length === 0) {
+      setIsVehicleModalOpen(true);
+      showToast("Silakan daftarkan kendaraan Anda terlebih dahulu.");
+      return;
+    }
+
+    const targetVehicleId = activeVehicle?.id || vehicles[0]?.id || "";
     let updatedRecords: FuelRecord[];
     const isEdit = Boolean(data.id);
 
@@ -237,7 +251,7 @@ export function App() {
     } else {
       // Calculate distance traveled and efficiency compared to previous record
       const prevRecords = records
-        .filter((r) => r.vehicleId === activeVehicle.id)
+        .filter((r) => r.vehicleId === targetVehicleId)
         .sort((a, b) => b.odometer - a.odometer);
 
       const lastRecord = prevRecords[0];
@@ -261,7 +275,7 @@ export function App() {
 
       const newRecord: FuelRecord = {
         id: `f-${Date.now()}`,
-        vehicleId: activeVehicle.id,
+        vehicleId: targetVehicleId,
         date: data.date || new Date().toISOString().slice(0, 10),
         time: data.time || new Date().toTimeString().slice(0, 5),
         odometer: newOdometer,
@@ -275,7 +289,6 @@ export function App() {
         location: data.location || "Indonesia",
         isFullTank: data.isFullTank ?? true,
         notes: data.notes,
-        receiptImage: data.receiptImage,
         fuelEfficiencyKmPerL,
         costPerKm,
         createdAt: new Date().toISOString(),
@@ -289,7 +302,7 @@ export function App() {
     saveStoredFuelRecords(updatedRecords, user?.uid);
 
     // Update vehicle's current odometer if newer
-    if (data.odometer && data.odometer > activeVehicle.currentOdometer) {
+    if (activeVehicle && data.odometer && data.odometer > activeVehicle.currentOdometer) {
       const updatedVehicles = vehicles.map((v) =>
         v.id === activeVehicle.id
           ? { ...v, currentOdometer: Number(data.odometer) }
@@ -460,19 +473,82 @@ export function App() {
     resetAllAppData(user?.uid);
     const freshVehicles = getStoredVehicles(user?.uid);
     setVehicles(freshVehicles);
-    setActiveVehicleId(freshVehicles[0]?.id || "veh-1");
+    setActiveVehicleId(freshVehicles[0]?.id || "");
     setRecords([]);
     setServices([]);
     setServiceHistory([]);
     showToast("Semua data berhasil dibersihkan.");
   };
 
+  const handleOpenAuth = (mode: "login" | "register" = "login") => {
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleOpenProfile = () => {
+    setIsProfileModalOpen(true);
+  };
+
+  const handleAuthSuccess = (u: User) => {
+    setUser(u);
+    const scopedVehicles = getStoredVehicles(u.uid);
+    setVehicles(scopedVehicles);
+    setActiveVehicleId(scopedVehicles[0]?.id || "");
+    setRecords(getStoredFuelRecords(u.uid));
+    setServices(getStoredServices(u.uid));
+    setServiceHistory(getStoredServiceHistory(u.uid));
+    setSpreadsheetInfo(getCachedSpreadsheetInfo());
+    showToast(`Selamat datang, ${u.displayName || u.email}!`);
+  };
+
+  const handleLoggedOut = () => {
+    setUser(null);
+    const guestVehicles = getStoredVehicles(null);
+    setVehicles(guestVehicles);
+    setActiveVehicleId(guestVehicles[0]?.id || "");
+    setRecords(getStoredFuelRecords(null));
+    setServices(getStoredServices(null));
+    setServiceHistory(getStoredServiceHistory(null));
+    setSpreadsheetInfo(getCachedSpreadsheetInfo());
+    showToast("Anda telah keluar dari akun.");
+  };
+
+  // 1. Initial Auth Loading State
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+        <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center animate-pulse mb-3 shadow-lg shadow-blue-500/25">
+          <Fuel className="w-6 h-6" />
+        </div>
+        <div className="flex items-center gap-2 text-slate-300 text-xs font-medium">
+          <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+          <span>Memuat aplikasi...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated State: Mandatory Login / Register Page per request
+  if (!user) {
+    return (
+      <AuthPage
+        onAuthSuccess={(loggedInUser) => {
+          handleAuthSuccess(loggedInUser);
+        }}
+      />
+    );
+  }
+
+  // 3. Authenticated User View
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0f141f] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-blue-600 selection:text-white">
       {/* Android Top App Bar */}
       <AndroidHeader
         activeVehicle={activeVehicle}
         onOpenVehicleSelector={() => setIsVehicleModalOpen(true)}
+        user={user}
+        onOpenAuth={handleOpenAuth}
+        onOpenProfile={handleOpenProfile}
       />
 
       {/* Floating Toast Alert */}
@@ -485,8 +561,8 @@ export function App() {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 sm:p-4">
+      {/* Main Content Area with generous bottom padding for floating dock nav */}
+      <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 sm:p-4 pb-28 sm:pb-32">
         {/* Tab 1: Home (Halaman Utama / Grafik & Statistik) */}
         {activeTab === "home" && (
           <StatsDashboard
@@ -497,8 +573,8 @@ export function App() {
               setEditingRecord(null);
               setIsManualModalOpen(true);
             }}
-            onOpenScanner={() => setIsScannerOpen(true)}
             onNavigateTab={setActiveTab}
+            onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />
         )}
 
@@ -508,7 +584,6 @@ export function App() {
             vehicle={activeVehicle}
             records={activeVehicleRecords}
             fuelUnit={fuelUnit}
-            onOpenScanner={() => setIsScannerOpen(true)}
             onOpenManualAdd={() => {
               setEditingRecord(null);
               setIsManualModalOpen(true);
@@ -518,6 +593,7 @@ export function App() {
               setEditingRecord(record);
               setIsManualModalOpen(true);
             }}
+            onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />
         )}
 
@@ -528,6 +604,7 @@ export function App() {
             serviceHistory={activeVehicleServiceHistory}
             onAddExpense={handleAddServiceHistory}
             onDeleteExpense={handleDeleteServiceHistory}
+            onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />
         )}
 
@@ -540,6 +617,7 @@ export function App() {
             services={services}
             serviceHistory={serviceHistory}
             fuelUnit={fuelUnit}
+            onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />
         )}
 
@@ -564,22 +642,16 @@ export function App() {
             spreadsheetInfo={spreadsheetInfo}
             isSyncingSpreadsheet={isSyncingSpreadsheet}
             onSyncSpreadsheet={handleSyncSpreadsheet}
+            onOpenAuth={handleOpenAuth}
+            onOpenProfile={handleOpenProfile}
           />
         )}
       </main>
 
-      {/* Bottom Android Navigation */}
+      {/* Floating Bottom Navigation Bar */}
       <BottomNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-      />
-
-      {/* Receipt Scanner Modal (Camera & Gemini AI) */}
-      <ReceiptScannerModal
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        activeVehicle={activeVehicle}
-        onSaveRecord={handleSaveFuelRecord}
       />
 
       {/* Manual Fuel Record Entry / Edit Modal */}
@@ -599,11 +671,39 @@ export function App() {
         isOpen={isVehicleModalOpen}
         onClose={() => setIsVehicleModalOpen(false)}
         vehicles={vehicles}
-        activeVehicleId={activeVehicle.id}
+        activeVehicleId={activeVehicle?.id || ""}
         onSelectVehicle={setActiveVehicleId}
         onAddVehicle={handleAddVehicle}
         onUpdateVehicle={handleUpdateVehicle}
       />
+
+      {/* Location Permission Prompt Banner on First Entry */}
+      <LocationPermissionBanner
+        onLocationUpdated={(loc) => {
+          showToast(`📍 Lokasi terdeteksi: ${loc.city}`);
+        }}
+      />
+
+      {/* Login & Registration Modal (for switching accounts or from Settings) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        initialMode={authModalMode}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* User Profile / Account Modal */}
+      {user && (
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          user={user}
+          vehiclesCount={vehicles.length}
+          recordsCount={records.length}
+          onOpenSwitchAccount={() => handleOpenAuth("login")}
+          onLoggedOut={handleLoggedOut}
+        />
+      )}
     </div>
   );
 }

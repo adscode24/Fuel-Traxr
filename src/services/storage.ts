@@ -15,17 +15,7 @@ function getScopedKey(baseKey: string, userId?: string | null): string {
   return baseKey;
 }
 
-export const DEFAULT_VEHICLES: Vehicle[] = [
-  {
-    id: "veh-1",
-    name: "Mobil Utama",
-    type: "car",
-    licensePlate: "",
-    currentOdometer: 0,
-    fuelTankCapacity: 45,
-    defaultFuelType: "Pertalite",
-  },
-];
+export const DEFAULT_VEHICLES: Vehicle[] = [];
 
 export const DEFAULT_FUEL_RECORDS: FuelRecord[] = [];
 
@@ -79,7 +69,7 @@ export function resetAllAppData(userId?: string | null): void {
     localStorage.setItem(getScopedKey(FUEL_RECORDS_KEY, userId), JSON.stringify([]));
     localStorage.setItem(getScopedKey(SERVICE_HISTORY_KEY, userId), JSON.stringify([]));
     localStorage.setItem(getScopedKey(SERVICES_KEY, userId), JSON.stringify([]));
-    localStorage.setItem(getScopedKey(VEHICLES_STORAGE_KEY, userId), JSON.stringify(DEFAULT_VEHICLES));
+    localStorage.setItem(getScopedKey(VEHICLES_STORAGE_KEY, userId), JSON.stringify([]));
     localStorage.setItem(getScopedKey(DUMMY_PURGED_KEY, userId), "true");
   } catch (e) {
     console.error("Failed to reset all data:", e);
@@ -92,30 +82,26 @@ export function getStoredVehicles(userId?: string | null): Vehicle[] {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) {
-      // If user just logged in and has no data yet, check if there's local guest data
-      if (userId) {
-        const guestRaw = localStorage.getItem(VEHICLES_STORAGE_KEY);
-        if (guestRaw) {
-          try {
-            const guestParsed = JSON.parse(guestRaw);
-            if (Array.isArray(guestParsed) && guestParsed.length > 0) {
-              localStorage.setItem(key, guestRaw);
-              return guestParsed;
-            }
-          } catch {}
-        }
-      }
-      localStorage.setItem(key, JSON.stringify(DEFAULT_VEHICLES));
-      return DEFAULT_VEHICLES;
+      return [];
     }
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) {
-      return DEFAULT_VEHICLES;
+      return [];
     }
-    return parsed;
+    // Filter out dummy auto-created "Mobil Utama" with no plate and 0 odometer
+    const filtered = parsed.filter(
+      (v: Vehicle) =>
+        !(
+          v.id === "veh-1" &&
+          (v.name === "Mobil Utama" || v.name === "Kendaraan Saya") &&
+          !v.licensePlate &&
+          v.currentOdometer === 0
+        )
+    );
+    return filtered;
   } catch (e) {
     console.error("Failed to load vehicles from storage:", e);
-    return DEFAULT_VEHICLES;
+    return [];
   }
 }
 

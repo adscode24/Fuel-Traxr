@@ -1,6 +1,6 @@
 {
   "name": "Catatan BBM & Servis",
-  "description": "Aplikasi pencatatan pengisian BBM kendaraan dengan scan struk AI, analisis konsumsi km/l bulanan, notifikasi servis berkala, grafik pengeluaran, ekspor PDF/Excel, dan sinkronisasi Google Drive.",
-  "requestFramePermissions": ["camera"],
+  "description": "Aplikasi pencatatan BBM dan servis armada kendaraan dengan info harga SPBU terkini, rute SPBU terdekat Google Maps, analisis efisiensi km/l, laporan PDF/Excel, dan pencadangan Google Drive.",
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

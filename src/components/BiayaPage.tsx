@@ -13,16 +13,18 @@ import {
   X,
   FileText,
   AlertCircle,
+  Car,
 } from "lucide-react";
 import { Vehicle, ServiceHistoryEntry, ExpenseCategory } from "../types";
 
 interface Props {
-  vehicle: Vehicle;
+  vehicle: Vehicle | null;
   serviceHistory: ServiceHistoryEntry[];
   onAddExpense: (
     entry: Omit<ServiceHistoryEntry, "id" | "createdAt">
   ) => void;
   onDeleteExpense: (id: string) => void;
+  onOpenRegisterVehicle?: () => void;
 }
 
 export const BiayaPage: React.FC<Props> = ({
@@ -30,6 +32,7 @@ export const BiayaPage: React.FC<Props> = ({
   serviceHistory,
   onAddExpense,
   onDeleteExpense,
+  onOpenRegisterVehicle,
 }) => {
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,7 +45,7 @@ export const BiayaPage: React.FC<Props> = ({
   const [title, setTitle] = useState("");
   const [cost, setCost] = useState("");
   const [odometer, setOdometer] = useState<string>(
-    vehicle.currentOdometer ? String(vehicle.currentOdometer) : ""
+    vehicle?.currentOdometer ? String(vehicle.currentOdometer) : ""
   );
   const [workshop, setWorkshop] = useState("");
   const [notes, setNotes] = useState("");
@@ -54,10 +57,11 @@ export const BiayaPage: React.FC<Props> = ({
 
   // Filter history strictly for current active vehicle
   const vehicleExpenses = useMemo(() => {
+    if (!vehicle) return [];
     return serviceHistory
       .filter((h) => h.vehicleId === vehicle.id)
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [serviceHistory, vehicle.id]);
+  }, [serviceHistory, vehicle?.id]);
 
   // Aggregate totals
   const totals = useMemo(() => {
@@ -202,8 +206,36 @@ export const BiayaPage: React.FC<Props> = ({
     );
   };
 
+  // If user has not registered vehicle yet, show registration prompt
+  if (!vehicle) {
+    return (
+      <div className="space-y-4 pb-28">
+        <div className="bg-white dark:bg-[#151c2c] p-7 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/60 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+            <Car className="w-7 h-7" />
+          </div>
+          <div className="max-w-sm mx-auto">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              Daftarkan Kendaraan Anda
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Anda belum mendaftarkan kendaraan. Daftarkan mobil atau motor Anda sekarang untuk mulai mencatat biaya servis, tol, dan pengeluaran kendaraan.
+            </p>
+          </div>
+          <button
+            onClick={onOpenRegisterVehicle}
+            className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Daftarkan Kendaraan Anda</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4 pb-20 text-slate-800 dark:text-slate-100 transition-colors">
+    <div className="space-y-4 pb-24 text-slate-800 dark:text-slate-100 transition-colors">
       {/* Header & Quick Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#182132] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>

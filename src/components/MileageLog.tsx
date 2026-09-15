@@ -8,22 +8,23 @@ import {
   Edit2,
   Eye,
   Plus,
-  Camera,
   Calendar,
   Layers,
   Search,
   X,
   Tag,
   AlertTriangle,
+  Car,
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit } from "../types";
+import { StationLogo } from "./StationLogo";
 
 interface Props {
-  vehicle: Vehicle;
+  vehicle: Vehicle | null;
   records: FuelRecord[];
   fuelUnit?: FuelEfficiencyUnit;
-  onOpenScanner: () => void;
   onOpenManualAdd: () => void;
+  onOpenRegisterVehicle?: () => void;
   onDeleteRecord: (id: string) => void;
   onEditRecord: (record: FuelRecord) => void;
 }
@@ -32,8 +33,8 @@ export const MileageLog: React.FC<Props> = ({
   vehicle,
   records,
   fuelUnit = "km/l",
-  onOpenScanner,
   onOpenManualAdd,
+  onOpenRegisterVehicle,
   onDeleteRecord,
   onEditRecord,
 }) => {
@@ -41,7 +42,6 @@ export const MileageLog: React.FC<Props> = ({
   const [previewReceipt, setPreviewReceipt] = useState<string | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<FuelRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [fabOpen, setFabOpen] = useState(false);
 
   // Filter records by station name, notes, or date
   const filteredRecords = records.filter((r) => {
@@ -80,8 +80,36 @@ export const MileageLog: React.FC<Props> = ({
     return val.toFixed(2).replace(".", ",");
   };
 
+  // If user has not registered vehicle yet, show registration prompt
+  if (!vehicle) {
+    return (
+      <div className="space-y-4 pb-28">
+        <div className="bg-white dark:bg-[#151c2c] p-7 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/60 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+            <Car className="w-7 h-7" />
+          </div>
+          <div className="max-w-sm mx-auto">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              Daftarkan Kendaraan Anda
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Anda belum mendaftarkan kendaraan. Daftarkan mobil atau motor Anda sekarang untuk mulai mencatat riwayat pengisian BBM.
+            </p>
+          </div>
+          <button
+            onClick={onOpenRegisterVehicle}
+            className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Daftarkan Kendaraan Anda</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-4 pb-24 transition-colors">
+    <div className="space-y-4 pb-28 transition-colors">
       {/* Page Header Banner */}
       <div className="p-4 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -93,7 +121,7 @@ export const MileageLog: React.FC<Props> = ({
               Data Bensin
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Riwayat pengisian bahan bakar, konsumsi per liter, dan struk SPBU.
+              Riwayat pengisian bahan bakar, konsumsi per liter, dan rincian pengeluaran.
             </p>
           </div>
         </div>
@@ -101,19 +129,11 @@ export const MileageLog: React.FC<Props> = ({
         <div className="flex items-center gap-1.5">
           <button
             onClick={onOpenManualAdd}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95"
-            title="Tambah Pengisian Manual"
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95"
+            title="Tambah Pengisian BBM"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Catat</span>
-          </button>
-          <button
-            onClick={onOpenScanner}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 dark:bg-[#1f293d] hover:bg-slate-200 dark:hover:bg-[#27344d] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 transition active:scale-95"
-            title="Scan Struk SPBU"
-          >
-            <Camera className="w-3.5 h-3.5 text-blue-500" />
-            <span className="hidden sm:inline">Scan</span>
+            <span>+ Catat BBM</span>
           </button>
         </div>
       </div>
@@ -196,7 +216,7 @@ export const MileageLog: React.FC<Props> = ({
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-4">
             {searchQuery
               ? `Tidak ada data pengisian BBM yang cocok dengan kata kunci "${searchQuery}". Coba periksa ejaan SPBU, tanggal, atau catatan.`
-              : "Catat pengisian bensin pertama dengan memfoto struk SPBU atau masukkan data manual."}
+              : "Catat pengisian bensin pertama Anda untuk mulai memantau pengeluaran dan konsumsi bahan bakar."}
           </p>
           <div className="flex items-center justify-center gap-2">
             {searchQuery ? (
@@ -208,11 +228,11 @@ export const MileageLog: React.FC<Props> = ({
               </button>
             ) : (
               <button
-                onClick={onOpenScanner}
+                onClick={onOpenManualAdd}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow transition"
               >
-                <Camera className="w-4 h-4" />
-                Foto Struk Sekarang
+                <Plus className="w-4 h-4" />
+                + Catat BBM Sekarang
               </button>
             )}
           </div>
@@ -265,27 +285,12 @@ export const MileageLog: React.FC<Props> = ({
                     {/* Top Row: Brand Logo, Date, Total Cost & Odometer */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-start space-x-3.5">
-                        {/* Circular Fuel Brand Logo */}
-                        <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-white flex items-center justify-center shadow-sm shrink-0 overflow-hidden relative p-1.5 border border-slate-200 dark:border-transparent">
-                          <svg
-                            viewBox="0 0 100 100"
-                            className="w-full h-full"
-                            fill="none"
-                          >
-                            <path
-                              d="M20 70 L48 22 L72 22 L44 70 Z"
-                              fill="#005BAA"
-                            />
-                            <path
-                              d="M48 22 L78 22 L86 36 L56 36 Z"
-                              fill="#ED1C24"
-                            />
-                            <path
-                              d="M32 70 L44 70 L60 44 L48 44 Z"
-                              fill="#8DC63F"
-                            />
-                          </svg>
-                        </div>
+                        {/* Circular Fuel Brand Logo matching the SPBU station name */}
+                        <StationLogo
+                          stationName={record.stationName}
+                          fuelCategory={vehicle.fuelCategory}
+                          className="w-11 h-11"
+                        />
 
                         <div>
                           {/* Date & Time */}
@@ -479,47 +484,14 @@ export const MileageLog: React.FC<Props> = ({
       )}
 
       {/* Android Floating Action Button (FAB) (+) */}
-      <div className="fixed bottom-20 right-5 z-40 flex flex-col items-end space-y-2">
-        {fabOpen && (
-          <div className="flex flex-col items-end space-y-2 mb-1 animate-in fade-in slide-in-from-bottom-2">
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                onOpenManualAdd();
-              }}
-              className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-white dark:bg-[#20293d] hover:bg-slate-100 dark:hover:bg-[#28344e] text-slate-800 dark:text-white text-xs font-semibold shadow-xl border border-slate-200 dark:border-slate-700 transition"
-            >
-              <Plus className="w-4 h-4 text-blue-500" />
-              Catat Manual
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setFabOpen(false);
-                onOpenScanner();
-              }}
-              className="flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-xl transition"
-            >
-              <Camera className="w-4 h-4" />
-              Foto / Scan Struk
-            </button>
-          </div>
-        )}
-
-        {/* The big (+) button */}
+      <div className="fixed bottom-24 right-4 sm:right-6 z-30">
         <button
           type="button"
-          onClick={() => setFabOpen(!fabOpen)}
-          className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl transition active:scale-95 ${
-            fabOpen
-              ? "bg-slate-700 text-white rotate-45"
-              : "bg-blue-600 dark:bg-[#bfd5fd] text-white dark:text-[#0f172a] hover:bg-blue-500 dark:hover:bg-[#aac9fc]"
-          }`}
+          onClick={onOpenManualAdd}
+          className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-2xl bg-blue-600 hover:bg-blue-500 text-white transition active:scale-95 shadow-blue-600/30"
           title="Tambah Pengisian BBM"
         >
-          <Plus className="w-7 h-7 stroke-[2.5]" />
+          <Plus className="w-6 h-6 stroke-[2.5]" />
         </button>
       </div>
 
@@ -545,7 +517,12 @@ export const MileageLog: React.FC<Props> = ({
             <div className="p-3 bg-slate-50 dark:bg-[#111724] rounded-xl border border-slate-200 dark:border-slate-800/80 text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 dark:text-slate-400">SPBU</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <StationLogo
+                    stationName={recordToDelete.stationName}
+                    fuelCategory={vehicle.fuelCategory}
+                    className="w-4 h-4 !border-none !shadow-none inline-block"
+                  />
                   {recordToDelete.stationName}
                 </span>
               </div>

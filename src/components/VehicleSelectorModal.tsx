@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Car, Bike, Plus, Check, X, Edit2, Gauge } from "lucide-react";
 import { Vehicle } from "../types";
 
@@ -21,8 +21,14 @@ export const VehicleSelectorModal: React.FC<Props> = ({
   onAddVehicle,
   onUpdateVehicle,
 }) => {
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(vehicles.length === 0);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+
+  useEffect(() => {
+    if (isOpen && vehicles.length === 0) {
+      setShowAddForm(true);
+    }
+  }, [isOpen, vehicles.length]);
 
   // New vehicle form state
   const [name, setName] = useState("");
@@ -81,7 +87,9 @@ export const VehicleSelectorModal: React.FC<Props> = ({
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <Car className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">Pilih Kendaraan</h2>
+            <h2 className="text-base font-bold text-slate-900 dark:text-white">
+              {vehicles.length === 0 ? "Daftarkan Kendaraan Anda" : "Pilih Kendaraan"}
+            </h2>
           </div>
           <button
             onClick={onClose}

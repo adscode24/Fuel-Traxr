@@ -14,6 +14,7 @@ import {
   Info,
   Filter,
   RotateCcw,
+  Plus,
 } from "lucide-react";
 import {
   Vehicle,
@@ -28,12 +29,13 @@ import { exportToExcel, exportToPDF } from "../services/exportService";
 import { calculateMonthlySummaries } from "../services/storage";
 
 interface Props {
-  vehicle: Vehicle;
+  vehicle: Vehicle | null;
   vehicles: Vehicle[];
   records: FuelRecord[];
   services: ServiceItem[];
   serviceHistory: ServiceHistoryEntry[];
   fuelUnit?: FuelEfficiencyUnit;
+  onOpenRegisterVehicle?: () => void;
 }
 
 export const ReportPage: React.FC<Props> = ({
@@ -43,6 +45,7 @@ export const ReportPage: React.FC<Props> = ({
   services,
   serviceHistory,
   fuelUnit = "km/l",
+  onOpenRegisterVehicle,
 }) => {
   // Filters: Vehicle & Date Range
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(
@@ -212,6 +215,34 @@ export const ReportPage: React.FC<Props> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  // If no vehicle registered yet
+  if (!vehicle && vehicles.length === 0) {
+    return (
+      <div className="space-y-4 pb-28">
+        <div className="bg-white dark:bg-[#151c2c] p-7 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/60 text-center space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+            <Car className="w-7 h-7" />
+          </div>
+          <div className="max-w-sm mx-auto">
+            <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+              Daftarkan Kendaraan Anda
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+              Anda belum mendaftarkan kendaraan. Daftarkan mobil atau motor Anda untuk melihat laporan pengeluaran, konsumsi bensin, dan ekspor ke Excel / PDF.
+            </p>
+          </div>
+          <button
+            onClick={onOpenRegisterVehicle}
+            className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Daftarkan Kendaraan Anda</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 pb-24 text-slate-800 dark:text-slate-100 transition-colors">

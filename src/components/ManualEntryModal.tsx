@@ -1,14 +1,53 @@
 import React, { useState, useEffect } from "react";
-import { X, Fuel, Calendar, MapPin, Gauge, Calculator } from "lucide-react";
+import {
+  X,
+  Fuel,
+  Calendar,
+  MapPin,
+  Gauge,
+  Calculator,
+  Navigation,
+  Loader2,
+  ChevronDown,
+  Edit3,
+  ListFilter,
+  CheckCircle2,
+} from "lucide-react";
 import { Vehicle, FuelRecord } from "../types";
+import {
+  StationLogo,
+  detectStationBrand,
+  getStationBrandLabel,
+} from "./StationLogo";
+import {
+  getStoredUserLocation,
+  requestAndDetectUserLocation,
+  getStationsForUserLocation,
+  SPBUStationOption,
+  UserLocationInfo,
+} from "../services/locationService";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  activeVehicle: Vehicle;
+  activeVehicle: Vehicle | null;
   editingRecord?: FuelRecord | null;
   onSaveRecord: (record: Partial<FuelRecord>) => void;
 }
+
+// Helper to get formatted local current date (YYYY-MM-DD) and current time (HH:mm)
+const getNowDateTime = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hours}:${minutes}`,
+  };
+};
 
 export const ManualEntryModal: React.FC<Props> = ({
   isOpen,
@@ -17,9 +56,9 @@ export const ManualEntryModal: React.FC<Props> = ({
   editingRecord,
   onSaveRecord,
 }) => {
-  // All fields start completely empty for new manual entries as requested
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  // Tanggal dan waktu pengisian secara default diisi dengan tanggal dan waktu saat melakukan pengisian, namun bisa diedit
+  const [date, setDate] = useState(() => getNowDateTime().date);
+  const [time, setTime] = useState(() => getNowDateTime().time);
   const [odometer, setOdometer] = useState("");
   const [fuelType, setFuelType] = useState("");
   const [octaneOrGrade, setOctaneOrGrade] = useState("");
@@ -31,6 +70,14 @@ export const ManualEntryModal: React.FC<Props> = ({
   const [isFullTank, setIsFullTank] = useState(false);
   const [notes, setNotes] = useState("");
 
+  // Location & SPBU Dropdown States
+  const [userLocation, setUserLocation] = useState<UserLocationInfo | null>(() =>
+    getStoredUserLocation()
+  );
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
+  const [isCustomStation, setIsCustomStation] = useState(false);
+
   // Helper to parse numbers from string supporting both comma (,) and dot (.)
   const parseNum = (val: string): number => {
     if (!val) return 0;
@@ -41,8 +88,8 @@ export const ManualEntryModal: React.FC<Props> = ({
 
   useEffect(() => {
     if (editingRecord) {
-      setDate(editingRecord.date || "");
-      setTime(editingRecord.time || "");
+      setDate(editingRecord.date || getNowDateTime().date);
+      setTime(editingRecord.time || getNowDateTime().time);
       setOdometer(editingRecord.odometer ? String(editingRecord.odometer) : "");
       setFuelType(editingRecord.fuelType || "");
       setOctaneOrGrade(editingRecord.octaneOrGrade || "");
@@ -61,10 +108,12 @@ export const ManualEntryModal: React.FC<Props> = ({
       setLocation(editingRecord.location || "");
       setIsFullTank(editingRecord.isFullTank ?? false);
       setNotes(editingRecord.notes || "");
+      setIsCustomStation(false);
     } else {
-      // Clean slate - entire form starts empty with no auto-fill
-      setDate("");
-      setTime("");
+      // Default tanggal & waktu pengisian saat ini, kolom lainnya mulai kosong
+      const now = getNowDateTime();
+      setDate(now.date);
+      setTime(now.time);
       setOdometer("");
       setFuelType("");
       setOctaneOrGrade("");
@@ -72,11 +121,53 @@ export const ManualEntryModal: React.FC<Props> = ({
       setLiters("");
       setTotalCost("");
       setStationName("");
-      setLocation("");
       setIsFullTank(false);
       setNotes("");
+      setIsCustomStation(false);
+
+      // Auto fill location from stored user location if available
+      const stored = getStoredUserLocation();
+      if (stored) {
+        setUserLocation(stored);
+        const autoLoc =
+          stored.formattedAddress ||
+          `${stored.district ? stored.district + ", " : ""}${stored.city}`;
+        setLocation(autoLoc);
+      } else {
+        setLocation("");
+      }
     }
   }, [editingRecord, isOpen]);
+
+  // Handle GPS location detection
+  const handleDetectLocation = async () => {
+    setIsLocating(true);
+    setLocationSuccessMsg(null);
+    try {
+      const loc = await requestAndDetectUserLocation();
+      setUserLocation(loc);
+      const formatted =
+        loc.formattedAddress ||
+        `${loc.district ? loc.district + ", " : ""}${loc.city}`;
+      setLocation(formatted);
+      setLocationSuccessMsg(`📍 Lokasi terdeteksi: ${loc.city}`);
+      setTimeout(() => setLocationSuccessMsg(null), 3500);
+    } catch (err: any) {
+      console.warn("GPS Location error:", err);
+      alert(
+        "Tidak dapat mendeteksi lokasi otomatis. Pastikan GPS/izin lokasi di browser diizinkan."
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
+  // Filter stations based on detected city / location text
+  const currentCityQuery = userLocation?.city || location || "";
+  const availableStations = getStationsForUserLocation(
+    currentCityQuery,
+    activeVehicle.fuelCategory
+  );
 
   if (!isOpen) return null;
 
@@ -140,8 +231,9 @@ export const ManualEntryModal: React.FC<Props> = ({
   };
 
   const handleSetToday = () => {
-    setDate(new Date().toISOString().slice(0, 10));
-    setTime(new Date().toTimeString().slice(0, 5));
+    const now = getNowDateTime();
+    setDate(now.date);
+    setTime(now.time);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -171,7 +263,7 @@ export const ManualEntryModal: React.FC<Props> = ({
 
     onSaveRecord({
       ...(editingRecord ? { id: editingRecord.id } : {}),
-      vehicleId: activeVehicle.id,
+      vehicleId: activeVehicle?.id || "",
       date: date,
       time: time || undefined,
       odometer: parsedOdometer,
@@ -188,7 +280,7 @@ export const ManualEntryModal: React.FC<Props> = ({
     onClose();
   };
 
-  const isElectric = activeVehicle.fuelCategory === "Elektrik";
+  const isElectric = activeVehicle?.fuelCategory === "Elektrik";
   const capacityUnit = isElectric ? "Kwh" : "Liter";
 
   return (
@@ -209,7 +301,7 @@ export const ManualEntryModal: React.FC<Props> = ({
                   : "Catat Pengisian BBM Manual"}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {activeVehicle.name} • {activeVehicle.fuelCategory || "Bensin"}
+                {activeVehicle?.name || "Kendaraan"} • {activeVehicle?.fuelCategory || "Bensin"}
               </p>
             </div>
           </div>
@@ -417,31 +509,254 @@ export const ManualEntryModal: React.FC<Props> = ({
           </div>
 
           {/* Station and Location */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Nama SPBU with Smart Dropdown List */}
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                {isElectric ? "Lokasi SPKLU / Rumah" : "Nama SPBU"}
-              </label>
-              <input
-                type="text"
-                value={stationName}
-                onChange={(e) => setStationName(e.target.value)}
-                placeholder={isElectric ? "Contoh: SPKLU Rest Area KM 57" : "Contoh: SPBU Pertamina"}
-                className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  {isElectric ? "Lokasi SPKLU / Stasiun" : "Nama SPBU"}
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
+                    <StationLogo
+                      stationName={stationName}
+                      fuelCategory={activeVehicle.fuelCategory}
+                      className="w-4 h-4 !border-none !shadow-none inline-block"
+                    />
+                    <span>
+                      {getStationBrandLabel(
+                        detectStationBrand(stationName, activeVehicle.fuelCategory)
+                      )}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomStation(!isCustomStation)}
+                    className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 font-medium hover:underline flex items-center gap-0.5"
+                  >
+                    {isCustomStation ? (
+                      <>
+                        <ListFilter className="w-3 h-3" />
+                        <span>Pilih Dropdown</span>
+                      </>
+                    ) : (
+                      <>
+                        <Edit3 className="w-3 h-3" />
+                        <span>Ketik Manual</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {!isCustomStation ? (
+                /* SPBU Dropdown List based on User Location */
+                <div className="relative flex items-center">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
+                    <StationLogo
+                      stationName={stationName}
+                      fuelCategory={activeVehicle.fuelCategory}
+                      className="w-5 h-5 !border-none !shadow-none"
+                    />
+                  </div>
+                  <select
+                    value={stationName}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__CUSTOM__") {
+                        setIsCustomStation(true);
+                        return;
+                      }
+                      setStationName(val);
+                      // Auto-fill location if station has a known address
+                      const match = availableStations.find((s) => s.name === val);
+                      if (match) {
+                        const targetLoc = `${match.address}, ${match.city}`;
+                        setLocation(targetLoc);
+                      }
+                    }}
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] appearance-none cursor-pointer"
+                  >
+                    <option value="">
+                      {userLocation?.city
+                        ? `-- Pilih SPBU di ${userLocation.city} / Terdekat --`
+                        : "-- Pilih Nama SPBU di Lokasi Anda --"}
+                    </option>
+
+                    {/* Group: SPBU di Sekitar Lokasi Pengguna */}
+                    <optgroup
+                      label={`📍 SPBU di Area ${
+                        userLocation?.city || location || "Sekitar Anda"
+                      }`}
+                    >
+                      {availableStations
+                        .filter(
+                          (s) =>
+                            !userLocation?.city ||
+                            s.city.toLowerCase().includes(userLocation.city.toLowerCase()) ||
+                            (userLocation?.district &&
+                              s.address.toLowerCase().includes(userLocation.district.toLowerCase()))
+                        )
+                        .map((st) => (
+                          <option key={st.id} value={st.name}>
+                            {st.name} — {st.address} ({st.city})
+                          </option>
+                        ))}
+                    </optgroup>
+
+                    {/* Group: SPBU Populer / Kota Lainnya */}
+                    <optgroup label="⭐ Jaringan SPBU Lainnya">
+                      {availableStations
+                        .filter(
+                          (s) =>
+                            userLocation?.city &&
+                            !s.city.toLowerCase().includes(userLocation.city.toLowerCase())
+                        )
+                        .map((st) => (
+                          <option key={st.id} value={st.name}>
+                            {st.name} ({st.city})
+                          </option>
+                        ))}
+                    </optgroup>
+
+                    <optgroup label="Lainnya">
+                      <option value="__CUSTOM__">
+                        ✏️ Ketik Nama SPBU Lainnya...
+                      </option>
+                    </optgroup>
+                  </select>
+                  <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
+                  </div>
+                </div>
+              ) : (
+                /* Freeform Custom Text Input */
+                <div className="relative flex items-center">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <StationLogo
+                      stationName={stationName}
+                      fuelCategory={activeVehicle.fuelCategory}
+                      className="w-5 h-5 !border-none !shadow-none"
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={stationName}
+                    onChange={(e) => setStationName(e.target.value)}
+                    placeholder={
+                      isElectric
+                        ? "Contoh: SPKLU Rest Area KM 57"
+                        : "Contoh: SPBU Pertamina 34-44116"
+                    }
+                    autoFocus
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                  />
+                </div>
+              )}
+
+              {/* Quick Brand Selector Pills */}
+              <div className="flex items-center flex-wrap gap-1 mt-1.5">
+                {isElectric ? (
+                  ["SPKLU PLN", "Shell Recharge", "Charging Rumah"].map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => {
+                        setStationName(brand);
+                        setIsCustomStation(true);
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border transition ${
+                        stationName.toLowerCase().includes(brand.toLowerCase())
+                          ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-medium"
+                          : "bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {brand}
+                    </button>
+                  ))
+                ) : (
+                  ["Pertamina", "Shell", "BP", "Vivo", "Total"].map((brand) => (
+                    <button
+                      key={brand}
+                      type="button"
+                      onClick={() => {
+                        // Check if there is an exact station for this brand in current city
+                        const match = availableStations.find(
+                          (s) =>
+                            s.brand.toLowerCase() === brand.toLowerCase() &&
+                            (!userLocation?.city ||
+                              s.city.toLowerCase().includes(userLocation.city.toLowerCase()))
+                        );
+                        if (match) {
+                          setStationName(match.name);
+                          setLocation(`${match.address}, ${match.city}`);
+                          setIsCustomStation(false);
+                        } else {
+                          setStationName(`SPBU ${brand}`);
+                          setIsCustomStation(true);
+                        }
+                      }}
+                      className={`text-[10px] px-2 py-0.5 rounded-md border transition ${
+                        stationName.toLowerCase().includes(brand.toLowerCase())
+                          ? "bg-blue-500/15 border-blue-500 text-blue-600 dark:text-blue-400 font-medium"
+                          : "bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {brand}
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
 
+            {/* Lokasi / Kota with GPS Auto-Detect */}
             <div>
-              <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Lokasi / Kota
-              </label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="Contoh: Tangerang"
-                className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                  Lokasi / Kota
+                </label>
+                <button
+                  type="button"
+                  onClick={handleDetectLocation}
+                  disabled={isLocating}
+                  className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-semibold hover:text-blue-700 dark:hover:text-blue-300 transition hover:underline px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 disabled:opacity-50"
+                  title="Deteksi Kota Otomatis dengan GPS"
+                >
+                  {isLocating ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Mendeteksi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="w-3 h-3" />
+                      <span>Deteksi Lokasi GPS</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="relative flex items-center">
+                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="Contoh: Tarogong Kaler, Garut"
+                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                />
+              </div>
+
+              {locationSuccessMsg && (
+                <div className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 animate-in fade-in duration-200 font-medium">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{locationSuccessMsg}</span>
+                </div>
+              )}
             </div>
           </div>
 
