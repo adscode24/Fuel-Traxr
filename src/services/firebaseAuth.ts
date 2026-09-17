@@ -41,7 +41,17 @@ const ACTIVE_LOCAL_USER_KEY = "bbm_active_local_user_v1";
 export function getRegisteredLocalUsers(): LocalUserRecord[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Filter out any corrupted entries (e.g. invalid emails or missing uids)
+    return parsed.filter(
+      (u) =>
+        u &&
+        typeof u.email === "string" &&
+        u.email.includes("@") &&
+        typeof u.uid === "string"
+    );
   } catch {
     return [];
   }
@@ -54,7 +64,18 @@ export function saveRegisteredLocalUsers(users: LocalUserRecord[]) {
 export function getActiveLocalUser(): LocalUserRecord | null {
   try {
     const raw = localStorage.getItem(ACTIVE_LOCAL_USER_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      typeof parsed.email === "string" &&
+      parsed.email.includes("@") &&
+      parsed.uid
+    ) {
+      return parsed;
+    }
+    localStorage.removeItem(ACTIVE_LOCAL_USER_KEY);
+    return null;
   } catch {
     return null;
   }
@@ -171,7 +192,7 @@ export const initAuth = (
 /**
  * Register a new user with Name, Email, Password, and optional Phone.
  * Tries Firebase Auth first, with graceful local fallback if Email/Password provider
- * is not configured in Firebase console.
+ * is not configured in Firebase console or encounters network/configuration issues.
  */
 export const registerWithEmail = async (
   name: string,
@@ -181,6 +202,14 @@ export const registerWithEmail = async (
 ): Promise<User> => {
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = name.trim();
+
+  // Pre-validate
+  if (!cleanEmail || !cleanEmail.includes("@")) {
+    throw new Error("Format alamat email tidak valid.");
+  }
+  if (!pass || pass.length < 6) {
+    throw new Error("Kata sandi minimal harus 6 karakter.");
+  }
 
   try {
     // Attempt Firebase registration
@@ -193,22 +222,35 @@ export const registerWithEmail = async (
       }
     }
 
-    // Also record into local registered list for quick switching
+    // Also record into local registered list with password for fast reliable fallback
     const users = getRegisteredLocalUsers().filter((u) => u.email !== cleanEmail);
     users.push({
       uid: cred.user.uid,
       name: cleanName,
       email: cleanEmail,
+      password: pass,
       phone: phone?.trim(),
       createdAt: new Date().toISOString(),
     });
     saveRegisteredLocalUsers(users);
+    setActiveLocalUser(null);
 
     return cred.user;
   } catch (firebaseErr: any) {
     console.warn("Firebase email registration warning:", firebaseErr?.code, firebaseErr?.message);
 
-    // If Firebase disallowed or network error, fallback to local storage authentication
+    // If already in use or invalid credentials in Firebase, provide immediate feedback
+    if (firebaseErr?.code === "auth/email-already-in-use") {
+      throw new Error("Alamat email ini sudah terdaftar di sistem. Silakan masuk.");
+    }
+    if (firebaseErr?.code === "auth/weak-password") {
+      throw new Error("Kata sandi terlalu lemah. Gunakan minimal 6 karakter.");
+    }
+    if (firebaseErr?.code === "auth/invalid-email") {
+      throw new Error("Format alamat email tidak valid.");
+    }
+
+    // Fallback to local storage authentication (e.g. if Firebase Auth provider not active or network error)
     const users = getRegisteredLocalUsers();
     const existing = users.find((u) => u.email === cleanEmail);
     if (existing) {
@@ -241,19 +283,43 @@ export const registerWithEmail = async (
 export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
   const cleanEmail = email.trim().toLowerCase();
 
+  if (!cleanEmail || !pass) {
+    throw new Error("Harap masukkan alamat email dan kata sandi Anda.");
+  }
+
   try {
     const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+    setActiveLocalUser(null);
+
+    // Keep local records up to date with this user
+    const users = getRegisteredLocalUsers();
+    const existing = users.find((u) => u.email === cleanEmail);
+    if (existing) {
+      existing.password = pass;
+      existing.name = cred.user.displayName || existing.name;
+    } else {
+      users.push({
+        uid: cred.user.uid,
+        name: cred.user.displayName || cleanEmail.split("@")[0],
+        email: cleanEmail,
+        password: pass,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    saveRegisteredLocalUsers(users);
+
     return cred.user;
   } catch (firebaseErr: any) {
     console.warn("Firebase email login warning:", firebaseErr?.code, firebaseErr?.message);
 
     // Check in local registered users
     const users = getRegisteredLocalUsers();
-    const match = users.find(
-      (u) => u.email.toLowerCase() === cleanEmail && (!u.password || u.password === pass)
-    );
+    const match = users.find((u) => u.email.toLowerCase() === cleanEmail);
 
     if (match) {
+      if (match.password && match.password !== pass) {
+        throw new Error("Kata sandi yang Anda masukkan salah.");
+      }
       setActiveLocalUser(match);
       const synthetic = createSyntheticUser(match);
       notifyAuthListeners(synthetic, null);
@@ -261,16 +327,52 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
     }
 
     // Map common Firebase errors to helpful Indonesian messages
-    if (firebaseErr?.code === "auth/invalid-credential" || firebaseErr?.code === "auth/wrong-password") {
+    if (
+      firebaseErr?.code === "auth/invalid-credential" ||
+      firebaseErr?.code === "auth/wrong-password"
+    ) {
       throw new Error("Email atau kata sandi yang Anda masukkan salah.");
     } else if (firebaseErr?.code === "auth/user-not-found") {
       throw new Error("Akun dengan email ini tidak ditemukan. Silakan lakukan pendaftaran.");
     } else if (firebaseErr?.code === "auth/too-many-requests") {
       throw new Error("Terlalu banyak percobaan masuk gagal. Coba lagi dalam beberapa menit.");
+    } else if (firebaseErr?.code === "auth/invalid-email") {
+      throw new Error("Alamat email tidak valid.");
+    }
+
+    // If Firebase disallowed or network error, and no local match
+    if (
+      firebaseErr?.code === "auth/operation-not-allowed" ||
+      firebaseErr?.code === "auth/configuration-not-found"
+    ) {
+      throw new Error("Akun dengan email ini belum terdaftar. Silakan pilih tab 'Pendaftaran'.");
     }
 
     throw new Error(firebaseErr?.message || "Gagal masuk. Periksa kembali email dan kata sandi Anda.");
   }
+};
+
+/**
+ * Fast Guest / Demo Mode Login.
+ * Instantly logs in locally without requiring credentials.
+ */
+export const loginAsGuest = (): User => {
+  const users = getRegisteredLocalUsers();
+  let guest = users.find((u) => u.email === "tamu@bbm.local");
+  if (!guest) {
+    guest = {
+      uid: "usr_guest_demo",
+      name: "Pengguna Tamu",
+      email: "tamu@bbm.local",
+      createdAt: new Date().toISOString(),
+    };
+    users.push(guest);
+    saveRegisteredLocalUsers(users);
+  }
+  setActiveLocalUser(guest);
+  const synUser = createSyntheticUser(guest);
+  notifyAuthListeners(synUser, null);
+  return synUser;
 };
 
 /**

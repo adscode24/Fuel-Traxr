@@ -140,7 +140,7 @@ export const BiayaPage: React.FC<Props> = ({
     setTitle("");
     setCost("");
     setOdometer(
-      vehicle.currentOdometer ? String(vehicle.currentOdometer) : ""
+      vehicle?.currentOdometer ? String(vehicle.currentOdometer) : ""
     );
     setWorkshop("");
     setNotes("");
@@ -156,6 +156,11 @@ export const BiayaPage: React.FC<Props> = ({
     const parsedCost = parseFloat(cost.replace(/[^0-9]/g, ""));
     if (!parsedCost || parsedCost <= 0) {
       alert("Harap masukkan nominal biaya yang valid.");
+      return;
+    }
+
+    if (!vehicle) {
+      alert("Pilih atau daftarkan kendaraan terlebih dahulu.");
       return;
     }
 
@@ -502,7 +507,7 @@ export const BiayaPage: React.FC<Props> = ({
                   <h2 className="text-base font-bold text-slate-900 dark:text-white">
                     Catat Biaya Kendaraan
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{vehicle.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{vehicle?.name || "Kendaraan"}</p>
                 </div>
               </div>
               <button
@@ -602,7 +607,7 @@ export const BiayaPage: React.FC<Props> = ({
                     type="number"
                     value={odometer}
                     onChange={(e) => setOdometer(e.target.value)}
-                    placeholder={String(vehicle.currentOdometer)}
+                    placeholder={String(vehicle?.currentOdometer || 0)}
                     className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] font-mono"
                   />
                 </div>

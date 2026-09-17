@@ -288,7 +288,7 @@ export const MileageLog: React.FC<Props> = ({
                         {/* Circular Fuel Brand Logo matching the SPBU station name */}
                         <StationLogo
                           stationName={record.stationName}
-                          fuelCategory={vehicle.fuelCategory}
+                          fuelCategory={vehicle?.fuelCategory}
                           className="w-11 h-11"
                         />
 
@@ -520,7 +520,7 @@ export const MileageLog: React.FC<Props> = ({
                 <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <StationLogo
                     stationName={recordToDelete.stationName}
-                    fuelCategory={vehicle.fuelCategory}
+                    fuelCategory={vehicle?.fuelCategory}
                     className="w-4 h-4 !border-none !shadow-none inline-block"
                   />
                   {recordToDelete.stationName}

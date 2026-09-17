@@ -166,7 +166,7 @@ export const ManualEntryModal: React.FC<Props> = ({
   const currentCityQuery = userLocation?.city || location || "";
   const availableStations = getStationsForUserLocation(
     currentCityQuery,
-    activeVehicle.fuelCategory
+    activeVehicle?.fuelCategory
   );
 
   if (!isOpen) return null;
@@ -368,7 +368,7 @@ export const ManualEntryModal: React.FC<Props> = ({
                 Odometer Saat Ini (KM) *
               </label>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                Terkini: {activeVehicle.currentOdometer.toLocaleString("id-ID")}{" "}
+                Terkini: {(activeVehicle?.currentOdometer || 0).toLocaleString("id-ID")}{" "}
                 km
               </span>
             </div>
@@ -383,7 +383,7 @@ export const ManualEntryModal: React.FC<Props> = ({
               />
               <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">KM</span>
             </div>
-            {parseNum(odometer) > activeVehicle.currentOdometer && (
+            {activeVehicle && parseNum(odometer) > activeVehicle.currentOdometer && (
               <div className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 font-mono">
                 +
                 {(
@@ -521,12 +521,12 @@ export const ManualEntryModal: React.FC<Props> = ({
                   <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-semibold">
                     <StationLogo
                       stationName={stationName}
-                      fuelCategory={activeVehicle.fuelCategory}
+                      fuelCategory={activeVehicle?.fuelCategory}
                       className="w-4 h-4 !border-none !shadow-none inline-block"
                     />
                     <span>
                       {getStationBrandLabel(
-                        detectStationBrand(stationName, activeVehicle.fuelCategory)
+                        detectStationBrand(stationName, activeVehicle?.fuelCategory)
                       )}
                     </span>
                   </div>
@@ -557,7 +557,7 @@ export const ManualEntryModal: React.FC<Props> = ({
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none z-10">
                     <StationLogo
                       stationName={stationName}
-                      fuelCategory={activeVehicle.fuelCategory}
+                      fuelCategory={activeVehicle?.fuelCategory}
                       className="w-5 h-5 !border-none !shadow-none"
                     />
                   </div>
@@ -637,7 +637,7 @@ export const ManualEntryModal: React.FC<Props> = ({
                   <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
                     <StationLogo
                       stationName={stationName}
-                      fuelCategory={activeVehicle.fuelCategory}
+                      fuelCategory={activeVehicle?.fuelCategory}
                       className="w-5 h-5 !border-none !shadow-none"
                     />
                   </div>

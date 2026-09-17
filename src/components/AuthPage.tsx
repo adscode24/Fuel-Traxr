@@ -12,6 +12,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Sparkles,
+  UserCheck,
 } from "lucide-react";
 import { User } from "firebase/auth";
 import {
@@ -19,6 +20,7 @@ import {
   registerWithEmail,
   sendResetPassword,
   googleSignIn,
+  loginAsGuest,
 } from "../services/firebaseAuth";
 
 interface Props {
@@ -117,7 +119,12 @@ export const AuthPage: React.FC<Props> = ({ onAuthSuccess }) => {
 
     setLoading(true);
     try {
-      const user = await registerWithEmail(email, password, name.trim());
+      const user = await registerWithEmail(
+        name.trim(),
+        email.trim(),
+        password,
+        phone.trim() || undefined
+      );
       setSuccessMsg("Akun berhasil dibuat! Mengalihkan ke aplikasi...");
       setTimeout(() => {
         onAuthSuccess(user);
@@ -126,6 +133,20 @@ export const AuthPage: React.FC<Props> = ({ onAuthSuccess }) => {
       setErrorMsg(err.message || "Gagal mendaftarkan akun. Silakan coba lagi.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const guestUser = loginAsGuest();
+      setSuccessMsg("Masuk sebagai Tamu... Mengalihkan ke aplikasi...");
+      setTimeout(() => {
+        onAuthSuccess(guestUser);
+      }, 300);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Gagal masuk mode tamu.");
     }
   };
 
@@ -564,6 +585,21 @@ export const AuthPage: React.FC<Props> = ({ onAuthSuccess }) => {
                 ← Kembali ke Halaman Masuk
               </button>
             </form>
+          )}
+
+          {/* Quick Guest Access */}
+          {mode !== "forgot" && (
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                id="btn-guest-mode-access"
+                onClick={handleGuestLogin}
+                className="w-full py-2.5 px-3 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 bg-slate-50/70 hover:bg-blue-50/50 dark:bg-[#111724] dark:hover:bg-[#172033] text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-semibold transition flex items-center justify-center gap-2"
+              >
+                <UserCheck className="w-4 h-4 text-blue-500" />
+                <span>Masuk Cepat Mode Tamu (Tanpa Akun)</span>
+              </button>
+            </div>
           )}
 
           {/* Footer security guarantee */}

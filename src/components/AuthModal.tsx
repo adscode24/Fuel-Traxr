@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
+import { User } from "firebase/auth";
 import {
   loginWithEmail,
   registerWithEmail,
@@ -25,7 +26,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: "login" | "register";
-  onAuthSuccess: (userName: string) => void;
+  onAuthSuccess: (user: User) => void;
 }
 
 export const AuthModal: React.FC<Props> = ({
@@ -88,8 +89,7 @@ export const AuthModal: React.FC<Props> = ({
     setLoading(true);
     try {
       const user = await loginWithEmail(email, password);
-      const displayName = user.displayName || user.email?.split("@")[0] || "Pengguna";
-      onAuthSuccess(displayName);
+      onAuthSuccess(user);
       onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || "Gagal masuk. Periksa kembali email dan kata sandi Anda.");
@@ -127,8 +127,7 @@ export const AuthModal: React.FC<Props> = ({
     setLoading(true);
     try {
       const user = await registerWithEmail(name, email, password, phone);
-      const displayName = user.displayName || name.trim();
-      onAuthSuccess(displayName);
+      onAuthSuccess(user);
       onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || "Pendaftaran gagal. Silakan coba beberapa saat lagi.");
@@ -167,8 +166,7 @@ export const AuthModal: React.FC<Props> = ({
     try {
       const result = await googleSignIn();
       if (result?.user) {
-        const displayName = result.user.displayName || result.user.email?.split("@")[0] || "Pengguna";
-        onAuthSuccess(displayName);
+        onAuthSuccess(result.user);
         onClose();
       }
     } catch (err: any) {
