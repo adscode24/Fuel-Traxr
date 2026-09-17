@@ -432,57 +432,57 @@ export const ReportPage: React.FC<Props> = ({
       {/* KPI Metrics 4-Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {/* Total Biaya Keseluruhan */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium truncate">
             Total Pengeluaran
           </div>
-          <div className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-slate-900 dark:text-white tracking-tight mt-1 truncate" title={formatRupiah(totalVehicleSpend)}>
             {formatRupiah(totalVehicleSpend)}
           </div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 truncate">
             BBM + Biaya Operasional
           </div>
         </div>
 
         {/* Biaya BBM Saja */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
-            <span>Pengeluaran BBM</span>
-            <Droplet className="w-3.5 h-3.5 text-blue-500" />
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between gap-1">
+            <span className="truncate">Pengeluaran BBM</span>
+            <Droplet className="w-3.5 h-3.5 text-blue-500 shrink-0" />
           </div>
-          <div className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-blue-600 dark:text-blue-400 tracking-tight mt-1 truncate" title={formatRupiah(totalFuelCost)}>
             {formatRupiah(totalFuelCost)}
           </div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono">
+          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono truncate">
             {totalLiters.toFixed(1)} Liter • {filteredRecords.length} kali isi
           </div>
         </div>
 
         {/* Biaya Servis / Operasional */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
-            <span>Biaya Operasional</span>
-            <Wrench className="w-3.5 h-3.5 text-amber-500" />
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between gap-1">
+            <span className="truncate">Biaya Operasional</span>
+            <Wrench className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           </div>
-          <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-amber-600 dark:text-amber-400 tracking-tight mt-1 truncate" title={formatRupiah(totalServiceCost)}>
             {formatRupiah(totalServiceCost)}
           </div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 truncate">
             {filteredHistory.length} transaksi biaya
           </div>
         </div>
 
         {/* Efisiensi & Biaya / KM */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between">
-            <span>Rata-rata Konsumsi</span>
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium flex items-center justify-between gap-1">
+            <span className="truncate">Rata-rata Konsumsi</span>
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
           </div>
-          <div className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-emerald-600 dark:text-emerald-400 tracking-tight mt-1 truncate">
             {efficiencyFormatted.value}{" "}
             <span className="text-xs font-normal">{efficiencyFormatted.unitLabel}</span>
           </div>
-          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono">
+          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1 font-mono truncate">
             Biaya: {avgCostPerKm ? `Rp${avgCostPerKm.toLocaleString("id-ID")}/km` : "-"}
           </div>
         </div>

@@ -271,56 +271,56 @@ export const BiayaPage: React.FC<Props> = ({
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
         {/* Total Semua Biaya */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
             Total Biaya
           </div>
-          <div className="text-lg font-bold text-slate-900 dark:text-white font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-slate-900 dark:text-white tracking-tight mt-1 truncate" title={formatRupiah(totals.totalAll)}>
             {formatRupiah(totals.totalAll)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
             {vehicleExpenses.length} transaksi tercatat
           </div>
         </div>
 
         {/* Kategori: Service */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1">
-            <Wrench className="w-3 h-3" />
-            Service
+        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1 truncate">
+            <Wrench className="w-3 h-3 shrink-0" />
+            <span className="truncate">Service</span>
           </div>
-          <div className="text-lg font-bold text-blue-600 dark:text-blue-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-blue-600 dark:text-blue-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalService)}>
             {formatRupiah(totals.totalService)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
             Perawatan &amp; perbaikan
           </div>
         </div>
 
         {/* Kategori: Top Up Etoll */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
-            <CreditCard className="w-3 h-3" />
-            Top Up Etoll
+        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 truncate">
+            <CreditCard className="w-3 h-3 shrink-0" />
+            <span className="truncate">Top Up Etoll</span>
           </div>
-          <div className="text-lg font-bold text-amber-600 dark:text-amber-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-amber-600 dark:text-amber-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalEtoll)}>
             {formatRupiah(totals.totalEtoll)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
             Tarif tol &amp; uang elektronik
           </div>
         </div>
 
         {/* Kategori: Lainnya */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="text-[11px] font-medium text-purple-600 dark:text-purple-400 flex items-center gap-1">
-            <Layers className="w-3 h-3" />
-            Lainnya
+        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
+          <div className="text-[11px] font-medium text-purple-600 dark:text-purple-400 flex items-center gap-1 truncate">
+            <Layers className="w-3 h-3 shrink-0" />
+            <span className="truncate">Lainnya</span>
           </div>
-          <div className="text-lg font-bold text-purple-600 dark:text-purple-400 font-mono mt-1">
+          <div className="text-sm sm:text-base md:text-lg font-bold text-purple-600 dark:text-purple-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalLainnya)}>
             {formatRupiah(totals.totalLainnya)}
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">
+          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
             Parkir, cuci, aksesoris, dll
           </div>
         </div>

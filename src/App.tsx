@@ -568,6 +568,7 @@ export function App() {
           <StatsDashboard
             vehicle={activeVehicle}
             records={activeVehicleRecords}
+            serviceHistory={activeVehicleServiceHistory}
             fuelUnit={fuelUnit}
             onOpenManualAdd={() => {
               setEditingRecord(null);

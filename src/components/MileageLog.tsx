@@ -110,54 +110,36 @@ export const MileageLog: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 pb-28 transition-colors">
-      {/* Page Header Banner */}
-      <div className="p-4 rounded-2xl bg-white dark:bg-[#161d2d] border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-            <Droplet className="w-5 h-5 fill-blue-500/20" />
+      {/* Search Bar & Add Button */}
+      <div className="bg-white dark:bg-[#161c2a] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 flex items-center">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari SPBU, catatan, atau tanggal (contoh: Pertamina, luar kota, 2026-08)..."
+              className="w-full bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-9 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white transition"
+                title="Hapus pencarian"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          <div>
-            <h1 className="text-base font-bold text-slate-900 dark:text-white">
-              Data Bensin
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Riwayat pengisian bahan bakar, konsumsi per liter, dan rincian pengeluaran.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5">
           <button
             onClick={onOpenManualAdd}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 shrink-0"
             title="Tambah Pengisian BBM"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             <span>+ Catat BBM</span>
           </button>
-        </div>
-      </div>
-
-      {/* Search Bar (Filtering by station name, notes, or date) */}
-      <div className="bg-white dark:bg-[#161c2a] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
-        <div className="relative flex items-center">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari SPBU, catatan, atau tanggal (contoh: Pertamina, luar kota, 2026-08)..."
-            className="w-full bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-9 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white transition"
-              title="Hapus pencarian"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
         </div>
 
         {/* Filter Feedback / Quick Tags */}

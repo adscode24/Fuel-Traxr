@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -7,6 +7,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import {
   Gauge,
@@ -21,15 +24,18 @@ import {
   Droplet,
   Fuel,
   Calendar,
+  PieChart as PieIcon,
+  ReceiptText,
 } from "lucide-react";
-import { Vehicle, FuelRecord, FuelEfficiencyUnit } from "../types";
+import { Vehicle, FuelRecord, FuelEfficiencyUnit, ServiceHistoryEntry } from "../types";
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
 import { FuelPriceTodayCard } from "./FuelPriceTodayCard";
-import { StationLogo } from "./StationLogo";
+import { StationLogo, detectStationBrand } from "./StationLogo";
 
 interface Props {
   vehicle: Vehicle | null;
   records: FuelRecord[];
+  serviceHistory?: ServiceHistoryEntry[];
   fuelUnit?: FuelEfficiencyUnit;
   onOpenManualAdd?: () => void;
   onOpenRegisterVehicle?: () => void;
@@ -40,6 +46,7 @@ interface Props {
 export const StatsDashboard: React.FC<Props> = ({
   vehicle,
   records,
+  serviceHistory = [],
   fuelUnit = "km/l",
   onOpenManualAdd,
   onOpenRegisterVehicle,
@@ -50,12 +57,108 @@ export const StatsDashboard: React.FC<Props> = ({
     "expense" | "efficiency" | "volume"
   >("expense");
 
+  // Selected period for dashboard KPI cards: "all" or specific month "YYYY-MM"
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
+
+  // Selected mode for Pie Chart: "spbu" or "fuelType"
+  const [pieChartMode, setPieChartMode] = useState<"spbu" | "fuelType">("spbu");
+
   // Format IDR helper
   const formatRupiah = (val: number) => {
     return `Rp${Math.round(val).toLocaleString("id-ID")}`;
   };
 
-  // Group by months
+  // Helper to dynamically adjust typography size for nominal figures so they never overflow card boundaries
+  const getNominalSizeClass = (formattedStr: string) => {
+    const len = formattedStr.length;
+    if (len >= 13) return "text-[10px] sm:text-xs md:text-sm";
+    if (len >= 10) return "text-[11px] sm:text-xs md:text-base";
+    if (len >= 7) return "text-xs sm:text-sm md:text-base";
+    return "text-sm sm:text-base md:text-lg";
+  };
+
+  // Collect all available months from fuel records and other expenses
+  const availableMonths = useMemo(() => {
+    const monthMap = new Map<string, string>();
+    records.forEach((r) => {
+      if (r.date) {
+        const key = r.date.slice(0, 7);
+        if (!monthMap.has(key)) {
+          const d = new Date(r.date);
+          const label = !isNaN(d.getTime())
+            ? d.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
+            : key;
+          monthMap.set(key, label);
+        }
+      }
+    });
+    serviceHistory.forEach((h) => {
+      if (h.date) {
+        const key = h.date.slice(0, 7);
+        if (!monthMap.has(key)) {
+          const d = new Date(h.date);
+          const label = !isNaN(d.getTime())
+            ? d.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
+            : key;
+          monthMap.set(key, label);
+        }
+      }
+    });
+
+    return Array.from(monthMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([key, label]) => ({ key, label }));
+  }, [records, serviceHistory]);
+
+  // Data filtered by selectedPeriod for the 3 dashboard cards
+  const periodFuelRecords = useMemo(() => {
+    if (selectedPeriod === "all") return records;
+    return records.filter((r) => r.date && r.date.startsWith(selectedPeriod));
+  }, [records, selectedPeriod]);
+
+  const periodOtherExpenses = useMemo(() => {
+    if (selectedPeriod === "all") return serviceHistory;
+    return serviceHistory.filter((h) => h.date && h.date.startsWith(selectedPeriod));
+  }, [serviceHistory, selectedPeriod]);
+
+  // Card 1: Konsumsi BBM (km/L atau unit yang dipilih)
+  const periodEfficiencies = periodFuelRecords
+    .map((r) => r.fuelEfficiencyKmPerL)
+    .filter((e): e is number => typeof e === "number" && e > 0);
+
+  const periodTotalDistance = periodFuelRecords.reduce(
+    (acc, r) => acc + (r.distanceTraveled || 0),
+    0
+  );
+  const periodTotalLiters = periodFuelRecords.reduce(
+    (acc, r) => acc + (r.liters || 0),
+    0
+  );
+
+  const rawPeriodAvgEfficiency =
+    periodTotalDistance > 0 && periodTotalLiters > 0
+      ? periodTotalDistance / periodTotalLiters
+      : periodEfficiencies.length > 0
+      ? periodEfficiencies.reduce((a, b) => a + b, 0) / periodEfficiencies.length
+      : 0;
+
+  const displayPeriodEfficiency = formatEfficiency(rawPeriodAvgEfficiency, fuelUnit);
+
+  // Card 2: Biaya Bensin
+  const periodFuelCost = periodFuelRecords.reduce(
+    (acc, r) => acc + (r.totalCost || 0),
+    0
+  );
+  const periodFuelCount = periodFuelRecords.length;
+
+  // Card 3: Biaya Lainnya
+  const periodOtherCost = periodOtherExpenses.reduce(
+    (acc, h) => acc + (h.cost || 0),
+    0
+  );
+  const periodOtherCount = periodOtherExpenses.length;
+
+  // Group by months for the Area Trend Chart
   const monthlyMap: Record<
     string,
     {
@@ -149,42 +252,109 @@ export const StatsDashboard: React.FC<Props> = ({
     };
   });
 
-  // Current active month summary (defaults to newest month)
-  const currentMonthKey =
-    monthlyChartData.length > 0
-      ? monthlyChartData[monthlyChartData.length - 1].monthKey
-      : "";
-
-  const activeMonthData =
-    monthlyChartData.find((m) => m.monthKey === currentMonthKey) || {
-      monthName: "Bulan Ini",
-      expense: 0,
-      efficiency: 0,
-      volume: 0,
-      distance: 0,
-      costPerKm: 0,
-      fillCount: 0,
-    };
-
-  // Overall average efficiency
-  const allEfficiencies = records
-    .map((r) => r.fuelEfficiencyKmPerL)
-    .filter((e): e is number => typeof e === "number" && e > 0);
-
-  const overallAvgEfficiency =
-    allEfficiencies.length > 0
-      ? allEfficiencies.reduce((a, b) => a + b, 0) / allEfficiencies.length
-      : 0;
-
-  const displayOverallEfficiency = formatEfficiency(
-    overallAvgEfficiency,
-    fuelUnit
-  );
-
   // Recent 3 records for quick home feed
   const recentRecords = [...records]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
+
+  // Pie Chart Data: Total Persentase Jenis SPBU
+  const spbuPieData = useMemo(() => {
+    if (records.length === 0) return [];
+    const brandMap: Record<
+      string,
+      { name: string; liters: number; count: number; cost: number }
+    > = {};
+
+    records.forEach((r) => {
+      const brandKey = detectStationBrand(r.stationName, vehicle?.fuelCategory);
+      const brandDisplay: Record<string, string> = {
+        pertamina: "Pertamina",
+        shell: "Shell",
+        bp: "BP-AKR",
+        vivo: "Vivo",
+        total: "Total",
+        mobil: "ExxonMobil",
+        petronas: "Petronas",
+        spklu: "SPKLU PLN",
+        generic: r.stationName ? r.stationName.trim() : "SPBU Lain",
+      };
+      const name = brandDisplay[brandKey] || "SPBU Lain";
+      if (!brandMap[name]) {
+        brandMap[name] = { name, liters: 0, count: 0, cost: 0 };
+      }
+      brandMap[name].liters += r.liters || 0;
+      brandMap[name].count += 1;
+      brandMap[name].cost += r.totalCost || 0;
+    });
+
+    const totalLiters = Object.values(brandMap).reduce(
+      (acc, item) => acc + item.liters,
+      0
+    );
+
+    return Object.values(brandMap)
+      .map((item) => ({
+        name: item.name,
+        value: Number(item.liters.toFixed(1)),
+        count: item.count,
+        cost: item.cost,
+        percentage:
+          totalLiters > 0
+            ? Number(((item.liters / totalLiters) * 100).toFixed(1))
+            : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [records, vehicle?.fuelCategory]);
+
+  // Pie Chart Data: Total Persentase Jenis Bensin
+  const fuelTypePieData = useMemo(() => {
+    if (records.length === 0) return [];
+    const typeMap: Record<
+      string,
+      { name: string; liters: number; count: number; cost: number }
+    > = {};
+
+    records.forEach((r) => {
+      const name = (r.fuelType || "Bensin").trim();
+      if (!typeMap[name]) {
+        typeMap[name] = { name, liters: 0, count: 0, cost: 0 };
+      }
+      typeMap[name].liters += r.liters || 0;
+      typeMap[name].count += 1;
+      typeMap[name].cost += r.totalCost || 0;
+    });
+
+    const totalLiters = Object.values(typeMap).reduce(
+      (acc, item) => acc + item.liters,
+      0
+    );
+
+    return Object.values(typeMap)
+      .map((item) => ({
+        name: item.name,
+        value: Number(item.liters.toFixed(1)),
+        count: item.count,
+        cost: item.cost,
+        percentage:
+          totalLiters > 0
+            ? Number(((item.liters / totalLiters) * 100).toFixed(1))
+            : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [records]);
+
+  const activePieData = pieChartMode === "spbu" ? spbuPieData : fuelTypePieData;
+
+  const PIE_COLORS = [
+    "#2563eb", // blue
+    "#10b981", // emerald
+    "#f59e0b", // amber
+    "#ef4444", // red
+    "#8b5cf6", // violet
+    "#06b6d4", // cyan
+    "#ec4899", // pink
+    "#64748b", // slate
+  ];
 
   return (
     <div className="space-y-4 pb-20">
@@ -256,57 +426,108 @@ export const StatsDashboard: React.FC<Props> = ({
         </div>
       )}
 
-      {/* 2. Key Metrics Strip */}
-      <div className="grid grid-cols-3 gap-2.5">
-        {/* Metric 1: Rata-rata Konsumsi */}
-        <div className="bg-white dark:bg-[#151c2c] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Konsumsi BBM
-          </span>
-          <div className="mt-2">
-            <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono">
-              {displayOverallEfficiency.value}{" "}
-              <span className="text-[10px] font-normal text-slate-500">
-                {displayOverallEfficiency.unitLabel}
+      {/* 2. Key Metrics Header & Period Filter */}
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+            <Calendar className="w-3.5 h-3.5 text-blue-500" />
+            <span>Ringkasan Data</span>
+          </div>
+
+          {/* Period Selector: Specific Month or Total of All Months */}
+          <div className="flex items-center gap-1.5">
+            <label
+              htmlFor="dashboard-period-select"
+              className="text-[11px] text-slate-500 dark:text-slate-400 hidden xs:inline"
+            >
+              Periode:
+            </label>
+            <select
+              id="dashboard-period-select"
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="bg-white dark:bg-[#151c2c] border border-slate-200 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 shadow-2xs cursor-pointer"
+            >
+              <option value="all">Semua Bulan (Total)</option>
+              {availableMonths.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 3 KPI Cards: Konsumsi BBM, Biaya Bensin, Biaya Lainnya */}
+        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+          {/* Card 1: Konsumsi BBM */}
+          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+              Konsumsi BBM
+            </span>
+            <div className="mt-1.5 sm:mt-2 min-w-0">
+              <div className="flex items-baseline gap-0.5 sm:gap-1 text-slate-900 dark:text-white font-bold tracking-tight min-w-0">
+                <span className="text-xs sm:text-base md:text-lg font-bold truncate">
+                  {displayPeriodEfficiency.value}
+                </span>
+                <span className="text-[9px] sm:text-[10px] md:text-xs font-normal text-slate-500 dark:text-slate-400 shrink-0">
+                  {displayPeriodEfficiency.unitLabel}
+                </span>
+              </div>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block truncate mt-0.5">
+                {selectedPeriod === "all" ? "Rata-rata total" : "Bulan terpilih"}
               </span>
             </div>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-              Rata-rata total
-            </span>
           </div>
-        </div>
 
-        {/* Metric 2: Pengeluaran Bulan Ini */}
-        <div className="bg-white dark:bg-[#151c2c] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Biaya Bulan Ini
-          </span>
-          <div className="mt-2">
-            <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono">
-              {formatRupiah(activeMonthData.expense)}
-            </div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              {activeMonthData.fillCount}x pengisian
+          {/* Card 2: Biaya Bensin */}
+          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+              Biaya Bensin
             </span>
+            <div className="mt-1.5 sm:mt-2 min-w-0">
+              <div
+                className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
+                  Math.round(periodFuelCost).toLocaleString("id-ID")
+                )}`}
+                title={formatRupiah(periodFuelCost)}
+              >
+                <span className="text-[10px] sm:text-xs font-medium text-slate-400 dark:text-slate-500 shrink-0">
+                  Rp
+                </span>
+                <span className="truncate">
+                  {Math.round(periodFuelCost).toLocaleString("id-ID")}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate mt-0.5">
+                {periodFuelCount}x pengisian
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Metric 3: Biaya per Kilometer */}
-        <div className="bg-white dark:bg-[#151c2c] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
-          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-            Biaya / KM
-          </span>
-          <div className="mt-2">
-            <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white font-mono">
-              {activeMonthData.costPerKm > 0
-                ? `Rp${activeMonthData.costPerKm.toLocaleString("id-ID")}`
-                : "-"}
-            </div>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              {activeMonthData.distance > 0
-                ? `${activeMonthData.distance.toLocaleString("id-ID")} km`
-                : "Per kilometer"}
+          {/* Card 3: Biaya Lainnya (Servis, Etoll, Parkir, dll.) */}
+          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
+            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+              Biaya Lainnya
             </span>
+            <div className="mt-1.5 sm:mt-2 min-w-0">
+              <div
+                className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
+                  Math.round(periodOtherCost).toLocaleString("id-ID")
+                )}`}
+                title={formatRupiah(periodOtherCost)}
+              >
+                <span className="text-[10px] sm:text-xs font-medium text-slate-400 dark:text-slate-500 shrink-0">
+                  Rp
+                </span>
+                <span className="truncate">
+                  {Math.round(periodOtherCost).toLocaleString("id-ID")}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate mt-0.5">
+                {periodOtherCount} transaksi biaya
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -325,7 +546,7 @@ export const StatsDashboard: React.FC<Props> = ({
             </div>
 
             {/* Metric Segmented Control */}
-            <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0e1420] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0e1420] rounded-xl border border-slate-200 dark:border-slate-800 text-xs self-start sm:self-auto">
               <button
                 type="button"
                 onClick={() => setSelectedMetric("expense")}
@@ -517,6 +738,150 @@ export const StatsDashboard: React.FC<Props> = ({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* 6. Pie Chart: Total Data Persentase Jenis SPBU & Jenis Bensin */}
+      <div className="bg-white dark:bg-[#151c2c] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+              <PieIcon className="w-4 h-4 text-blue-500" />
+              <span>Persentase Distribusi BBM</span>
+            </h3>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Total data persentase {pieChartMode === "spbu" ? "jenis SPBU" : "jenis bensin"}
+            </p>
+          </div>
+
+          {/* Toggle Button: Jenis SPBU vs Jenis Bensin */}
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0e1420] rounded-xl border border-slate-200 dark:border-slate-800 text-xs self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setPieChartMode("spbu")}
+              className={`px-3 py-1 rounded-lg font-medium transition ${
+                pieChartMode === "spbu"
+                  ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white font-semibold shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              Jenis SPBU
+            </button>
+            <button
+              type="button"
+              onClick={() => setPieChartMode("fuelType")}
+              className={`px-3 py-1 rounded-lg font-medium transition ${
+                pieChartMode === "fuelType"
+                  ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white font-semibold shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              Jenis Bensin
+            </button>
+          </div>
+        </div>
+
+        {activePieData.length === 0 ? (
+          <div className="text-center py-8 space-y-2">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center">
+              <Droplet className="w-5 h-5" />
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Belum ada data pengisian untuk menampilkan grafik persentase {pieChartMode === "spbu" ? "SPBU" : "jenis bensin"}.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center pt-1">
+            {/* Donut Chart */}
+            <div className="sm:col-span-5 h-52 w-full flex items-center justify-center relative">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={activePieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={48}
+                    outerRadius={74}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {activePieData.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 shadow-lg space-y-1 z-50">
+                            <div className="font-bold text-slate-100">{d.name}</div>
+                            <div className="text-blue-400 font-mono">
+                              Persentase: {d.percentage}%
+                            </div>
+                            <div className="text-emerald-400 font-mono">
+                              Volume: {d.value} L ({d.count}x isi)
+                            </div>
+                            <div className="text-amber-400 font-mono">
+                              Biaya: {formatRupiah(d.cost)}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Center Stats */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium uppercase tracking-wider">
+                  {pieChartMode === "spbu" ? "SPBU" : "BBM"}
+                </span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white font-mono">
+                  {activePieData.length} Jenis
+                </span>
+              </div>
+            </div>
+
+            {/* Legend & Breakdown List */}
+            <div className="sm:col-span-7 space-y-2 max-h-56 overflow-y-auto pr-1">
+              {activePieData.map((item, index) => {
+                const color = PIE_COLORS[index % PIE_COLORS.length];
+                return (
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-[#101522] border border-slate-100 dark:border-slate-800/80 text-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {item.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 font-mono text-[11px]">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {item.value} L
+                      </span>
+                      <span
+                        className="px-1.5 py-0.5 rounded-md font-bold text-white text-[10px]"
+                        style={{ backgroundColor: color }}
+                      >
+                        {item.percentage}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
