@@ -89,9 +89,28 @@ export function setActiveLocalUser(user: LocalUserRecord | null) {
   }
 }
 
+const GOOGLE_TOKEN_KEY = "bbm_google_token";
+const GOOGLE_TOKEN_TIME_KEY = "bbm_google_token_time";
+const TOKEN_MAX_AGE_MS = 50 * 60 * 1000; // 50 minutes (Google tokens last 60 minutes)
+
 let isSigningIn = false;
-let cachedAccessToken: string | null = localStorage.getItem("bbm_google_token");
+let cachedAccessToken: string | null = localStorage.getItem(GOOGLE_TOKEN_KEY);
 let authListeners: Array<(user: User | null, token: string | null) => void> = [];
+
+export function hasGoogleAccessToken(): boolean {
+  const token = cachedAccessToken || localStorage.getItem(GOOGLE_TOKEN_KEY);
+  if (!token) return false;
+  const timeStr = localStorage.getItem(GOOGLE_TOKEN_TIME_KEY);
+  if (!timeStr) return false;
+  const age = Date.now() - parseInt(timeStr, 10);
+  return !isNaN(age) && age < TOKEN_MAX_AGE_MS;
+}
+
+export function clearGoogleAccessToken(): void {
+  cachedAccessToken = null;
+  localStorage.removeItem(GOOGLE_TOKEN_KEY);
+  localStorage.removeItem(GOOGLE_TOKEN_TIME_KEY);
+}
 
 function notifyAuthListeners(user: User | null, token: string | null) {
   authListeners.forEach((listener) => listener(user, token));
@@ -165,14 +184,16 @@ export const initAuth = (
     if (user) {
       // Clear local user if Firebase auth succeeds
       setActiveLocalUser(null);
-      const token = cachedAccessToken || localStorage.getItem("bbm_google_token");
-      if (token) {
+      let token: string | null = null;
+      if (hasGoogleAccessToken()) {
+        token = cachedAccessToken || localStorage.getItem(GOOGLE_TOKEN_KEY);
         cachedAccessToken = token;
+      } else {
+        clearGoogleAccessToken();
       }
       notifyAuthListeners(user, token);
     } else {
-      cachedAccessToken = null;
-      localStorage.removeItem("bbm_google_token");
+      clearGoogleAccessToken();
       const local = getActiveLocalUser();
       if (local) {
         const synUser = createSyntheticUser(local);
@@ -404,7 +425,8 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
-    localStorage.setItem("bbm_google_token", cachedAccessToken);
+    localStorage.setItem(GOOGLE_TOKEN_KEY, cachedAccessToken);
+    localStorage.setItem(GOOGLE_TOKEN_TIME_KEY, Date.now().toString());
     setActiveLocalUser(null);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
@@ -415,8 +437,21 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   }
 };
 
+export const requestGoogleAccessToken = async (): Promise<string> => {
+  const res = await googleSignIn();
+  if (!res?.accessToken) {
+    throw new Error("Otorisasi akun Google dibatalkan atau tidak memberikan token akses.");
+  }
+  return res.accessToken;
+};
+
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken || localStorage.getItem("bbm_google_token");
+  if (hasGoogleAccessToken()) {
+    return cachedAccessToken || localStorage.getItem(GOOGLE_TOKEN_KEY);
+  }
+  // Token is expired or missing
+  clearGoogleAccessToken();
+  return null;
 };
 
 export const logoutGoogle = async () => {
@@ -425,8 +460,7 @@ export const logoutGoogle = async () => {
   } catch (e) {
     console.warn("Firebase signout error:", e);
   }
-  cachedAccessToken = null;
-  localStorage.removeItem("bbm_google_token");
+  clearGoogleAccessToken();
   setActiveLocalUser(null);
   notifyAuthListeners(null, null);
 };

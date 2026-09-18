@@ -1,4 +1,4 @@
-import { getAccessToken } from "./firebaseAuth";
+import { getAccessToken, clearGoogleAccessToken } from "./firebaseAuth";
 import { Vehicle, FuelRecord, ServiceHistoryEntry, ServiceItem } from "../types";
 
 export interface SpreadsheetSyncPayload {
@@ -66,6 +66,10 @@ export async function findOrCreateSpreadsheet(
           headers: { Authorization: `Bearer ${token}` },
         }
       );
+      if (checkRes.status === 401) {
+        clearGoogleAccessToken();
+        throw new Error("Sesi Google telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda.");
+      }
       if (checkRes.ok) {
         const data = await checkRes.json();
         return {
@@ -73,9 +77,12 @@ export async function findOrCreateSpreadsheet(
           url: cached.spreadsheetUrl,
           title: data.properties?.title || targetTitle,
         };
+      } else if (checkRes.status === 404) {
+        clearCachedSpreadsheetInfo();
       }
-    } catch {
-      // Continue to search by name
+    } catch (e: any) {
+      if (e.message?.includes("kedaluwarsa")) throw e;
+      // Continue to search or create
     }
   }
 
@@ -83,21 +90,30 @@ export async function findOrCreateSpreadsheet(
   const query = encodeURIComponent(
     `name = '${targetTitle}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`
   );
-  const searchRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,webViewLink)`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-    }
-  );
+  try {
+    const searchRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,webViewLink)`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
 
-  if (searchRes.ok) {
-    const searchData = await searchRes.json();
-    if (searchData.files && searchData.files.length > 0) {
-      const file = searchData.files[0];
-      const url =
-        file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
-      return { id: file.id, url, title: file.name };
+    if (searchRes.status === 401) {
+      clearGoogleAccessToken();
+      throw new Error("Sesi Google telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda.");
     }
+
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      if (searchData.files && searchData.files.length > 0) {
+        const file = searchData.files[0];
+        const url =
+          file.webViewLink || `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
+        return { id: file.id, url, title: file.name };
+      }
+    }
+  } catch (e: any) {
+    if (e.message?.includes("kedaluwarsa")) throw e;
   }
 
   // Create new Spreadsheet
@@ -119,6 +135,11 @@ export async function findOrCreateSpreadsheet(
       ],
     }),
   });
+
+  if (createRes.status === 401) {
+    clearGoogleAccessToken();
+    throw new Error("Sesi Google telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda.");
+  }
 
   if (!createRes.ok) {
     const errText = await createRes.text();
@@ -290,7 +311,7 @@ export async function syncAllToGoogleSpreadsheet(
     ];
   });
 
-  // Helper to ensure sheet exists and update it
+  // Helper to ensure sheets exist and update them
   const sheetsToUpdate = [
     { name: "Catatan BBM", values: [fuelHeaders, ...fuelRows] },
     {
@@ -300,6 +321,51 @@ export async function syncAllToGoogleSpreadsheet(
     { name: "Data Kendaraan", values: [vehicleHeaders, ...vehicleRows] },
     { name: "Jadwal Servis", values: [serviceHeaders, ...serviceRows] },
   ];
+
+  // Query metadata to ensure all required tabs exist in the spreadsheet
+  try {
+    const metaRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (metaRes.status === 401) {
+      clearGoogleAccessToken();
+      throw new Error("Sesi Google telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda.");
+    }
+
+    if (metaRes.ok) {
+      const metaData = await metaRes.json();
+      const existingSheetTitles = new Set(
+        (metaData.sheets || []).map((s: any) => s.properties?.title)
+      );
+      const missingSheets = sheetsToUpdate
+        .map((s) => s.name)
+        .filter((title) => !existingSheetTitles.has(title));
+
+      if (missingSheets.length > 0) {
+        await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              requests: missingSheets.map((title) => ({
+                addSheet: { properties: { title } },
+              })),
+            }),
+          }
+        );
+      }
+    }
+  } catch (e: any) {
+    if (e.message?.includes("kedaluwarsa")) throw e;
+  }
 
   for (const item of sheetsToUpdate) {
     // 1. Clear previous content to guarantee deleted items in app are deleted in spreadsheet
@@ -335,6 +401,11 @@ export async function syncAllToGoogleSpreadsheet(
         }),
       }
     );
+
+    if (updateRes.status === 401) {
+      clearGoogleAccessToken();
+      throw new Error("Sesi Google telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda.");
+    }
 
     if (!updateRes.ok) {
       console.warn(`Gagal memperbarui tab "${item.name}":`, await updateRes.text());

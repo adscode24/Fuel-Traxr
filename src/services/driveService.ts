@@ -1,6 +1,7 @@
-import { getAccessToken } from "./firebaseAuth";
+import { getAccessToken, clearGoogleAccessToken } from "./firebaseAuth";
 
 const BACKUP_FILENAME = "bbm_kendaraan_backup.json";
+const CACHE_BACKUP_FILE_ID_KEY = "bbm_drive_backup_file_id";
 
 export interface SyncPayload {
   version: number;
@@ -14,12 +15,39 @@ export interface SyncPayload {
 
 // Search for existing file in user's Google Drive
 export async function findDriveBackupFile(token: string): Promise<{ id: string; modifiedTime: string } | null> {
+  const cachedId = localStorage.getItem(CACHE_BACKUP_FILE_ID_KEY);
+  if (cachedId) {
+    try {
+      const checkRes = await fetch(`https://www.googleapis.com/drive/v3/files/${cachedId}?fields=id,name,modifiedTime,trashed`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (checkRes.status === 401) {
+        clearGoogleAccessToken();
+        throw new Error("Sesi Google Drive telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda di Pengaturan.");
+      }
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (!checkData.trashed && checkData.name === BACKUP_FILENAME) {
+          return { id: checkData.id, modifiedTime: checkData.modifiedTime };
+        }
+      }
+      localStorage.removeItem(CACHE_BACKUP_FILE_ID_KEY);
+    } catch (e: any) {
+      if (e.message?.includes("kedaluwarsa")) throw e;
+    }
+  }
+
   const query = encodeURIComponent(`name = '${BACKUP_FILENAME}' and trashed = false`);
   const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,modifiedTime)`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
   });
+
+  if (res.status === 401) {
+    clearGoogleAccessToken();
+    throw new Error("Sesi Google Drive telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda di Pengaturan.");
+  }
 
   if (!res.ok) {
     const err = await res.text();
@@ -28,7 +56,9 @@ export async function findDriveBackupFile(token: string): Promise<{ id: string; 
 
   const data = await res.json();
   if (data.files && data.files.length > 0) {
-    return data.files[0];
+    const file = data.files[0];
+    localStorage.setItem(CACHE_BACKUP_FILE_ID_KEY, file.id);
+    return file;
   }
   return null;
 }
@@ -37,7 +67,7 @@ export async function findDriveBackupFile(token: string): Promise<{ id: string; 
 export async function syncDataToGoogleDrive(payload: SyncPayload): Promise<{ fileId: string; modifiedTime: string }> {
   const token = await getAccessToken();
   if (!token) {
-    throw new Error("Sesi Google Drive belum aktif. Silakan masuk dengan akun Google terlebih dahulu.");
+    throw new Error("Sesi Google Drive belum aktif atau kedaluwarsa. Silakan hubungkan akun Google terlebih dahulu.");
   }
 
   const existingFile = await findDriveBackupFile(token);
@@ -57,12 +87,18 @@ export async function syncDataToGoogleDrive(payload: SyncPayload): Promise<{ fil
       }
     );
 
+    if (updateRes.status === 401) {
+      clearGoogleAccessToken();
+      throw new Error("Sesi Google Drive telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda di Pengaturan.");
+    }
+
     if (!updateRes.ok) {
       const err = await updateRes.text();
       throw new Error(`Gagal memperbarui file di Google Drive: ${err}`);
     }
 
     const updated = await updateRes.json();
+    localStorage.setItem(CACHE_BACKUP_FILE_ID_KEY, existingFile.id);
     return {
       fileId: existingFile.id,
       modifiedTime: updated.modifiedTime || new Date().toISOString(),
@@ -100,12 +136,18 @@ export async function syncDataToGoogleDrive(payload: SyncPayload): Promise<{ fil
       }
     );
 
+    if (createRes.status === 401) {
+      clearGoogleAccessToken();
+      throw new Error("Sesi Google Drive telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda di Pengaturan.");
+    }
+
     if (!createRes.ok) {
       const err = await createRes.text();
       throw new Error(`Gagal membuat file baru di Google Drive: ${err}`);
     }
 
     const created = await createRes.json();
+    localStorage.setItem(CACHE_BACKUP_FILE_ID_KEY, created.id);
     return {
       fileId: created.id,
       modifiedTime: new Date().toISOString(),
@@ -117,7 +159,7 @@ export async function syncDataToGoogleDrive(payload: SyncPayload): Promise<{ fil
 export async function downloadDataFromGoogleDrive(fileId?: string): Promise<SyncPayload> {
   const token = await getAccessToken();
   if (!token) {
-    throw new Error("Sesi Google Drive belum aktif.");
+    throw new Error("Sesi Google Drive belum aktif atau kedaluwarsa. Silakan hubungkan akun Google terlebih dahulu.");
   }
 
   let targetId = fileId;
@@ -134,6 +176,11 @@ export async function downloadDataFromGoogleDrive(fileId?: string): Promise<Sync
       Authorization: `Bearer ${token}`,
     },
   });
+
+  if (res.status === 401) {
+    clearGoogleAccessToken();
+    throw new Error("Sesi Google Drive telah kedaluwarsa. Silakan hubungkan kembali akun Google Anda di Pengaturan.");
+  }
 
   if (!res.ok) {
     const err = await res.text();

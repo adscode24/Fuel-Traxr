@@ -19,7 +19,7 @@ import {
   saveStoredServiceHistory,
   resetAllAppData,
 } from "./services/storage";
-import { initAuth, googleSignIn, logoutGoogle } from "./services/firebaseAuth";
+import { initAuth, googleSignIn, logoutGoogle, hasGoogleAccessToken } from "./services/firebaseAuth";
 import {
   syncDataToGoogleDrive,
   downloadDataFromGoogleDrive,
@@ -90,6 +90,7 @@ export function App() {
   });
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasGoogleToken, setHasGoogleToken] = useState<boolean>(() => hasGoogleAccessToken());
   const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(() =>
     getCachedSpreadsheetInfo()
   );
@@ -107,9 +108,10 @@ export function App() {
   // Setup Auth Listener with multi-user partitioned data loading
   useEffect(() => {
     const unsubscribe = initAuth(
-      (u) => {
+      (u, token) => {
         setUser(u);
         setAuthLoading(false);
+        setHasGoogleToken(Boolean(token || hasGoogleAccessToken()));
         const scopedVehicles = getStoredVehicles(u.uid);
         setVehicles(scopedVehicles);
         setActiveVehicleId(scopedVehicles[0]?.id || "");
@@ -121,6 +123,7 @@ export function App() {
       () => {
         setUser(null);
         setAuthLoading(false);
+        setHasGoogleToken(false);
         const guestVehicles = getStoredVehicles(null);
         setVehicles(guestVehicles);
         setActiveVehicleId(guestVehicles[0]?.id || "");
@@ -183,7 +186,7 @@ export function App() {
 
   // Trigger background auto sync if enabled (both Google Drive and Google Sheets)
   const triggerAutoSync = useCallback(async () => {
-    if (!user || !autoSync) return;
+    if (!user || !autoSync || !hasGoogleAccessToken()) return;
     try {
       setIsSyncing(true);
       const payload: SyncPayload = {
@@ -201,7 +204,11 @@ export function App() {
         minute: "2-digit",
       });
       setLastSyncedAt(timeStr);
+      setHasGoogleToken(true);
     } catch (err: any) {
+      if (err?.message?.includes("kedaluwarsa") || err?.message?.includes("belum aktif")) {
+        setHasGoogleToken(false);
+      }
       console.warn("Auto-sync to Google Drive skipped or failed:", err);
     } finally {
       setIsSyncing(false);
@@ -217,7 +224,11 @@ export function App() {
         userEmail: user.email || undefined,
       });
       setSpreadsheetInfo(sheetRes);
+      setHasGoogleToken(true);
     } catch (sheetErr: any) {
+      if (sheetErr?.message?.includes("kedaluwarsa") || sheetErr?.message?.includes("belum aktif")) {
+        setHasGoogleToken(false);
+      }
       console.warn("Auto-sync to Google Sheets skipped or failed:", sheetErr);
     }
   }, [user, autoSync, vehicles, records, services, serviceHistory]);
@@ -373,7 +384,24 @@ export function App() {
       const res = await googleSignIn();
       if (res) {
         setUser(res.user);
-        showToast(`Terhubung dengan Google Drive & Spreadsheet (${res.user.email})`);
+        setHasGoogleToken(true);
+        showToast(`Berhasil menghubungkan Google Drive & Spreadsheet (${res.user.email})`);
+        // Immediately sync spreadsheet in background
+        try {
+          setIsSyncingSpreadsheet(true);
+          const info = await syncAllToGoogleSpreadsheet({
+            vehicles,
+            fuelRecords: records,
+            serviceHistory,
+            services,
+            userEmail: res.user.email || undefined,
+          });
+          setSpreadsheetInfo(info);
+        } catch (e) {
+          console.warn("Spreadsheet initial sync warning:", e);
+        } finally {
+          setIsSyncingSpreadsheet(false);
+        }
       }
     } catch (err: any) {
       showToast(`Gagal menghubungkan Google: ${err.message || err}`);
@@ -384,6 +412,7 @@ export function App() {
     try {
       await logoutGoogle();
       setUser(null);
+      setHasGoogleToken(false);
       showToast("Koneksi Google telah diputuskan.");
     } catch (err: any) {
       showToast(`Gagal memutuskan koneksi: ${err.message || err}`);
@@ -392,11 +421,17 @@ export function App() {
 
   const handleManualSync = async () => {
     if (!user) {
-      showToast("Silakan hubungkan akun Google terlebih dahulu.");
+      showToast("Silakan masuk akun terlebih dahulu.");
       return;
     }
     try {
       setIsSyncing(true);
+      if (!hasGoogleAccessToken()) {
+        showToast("Menghubungkan otorisasi Google...");
+        const res = await googleSignIn();
+        if (!res) return;
+        setHasGoogleToken(true);
+      }
       const payload = getFullPayload();
       await syncDataToGoogleDrive(payload);
       const timeStr = new Date().toLocaleTimeString("id-ID", {
@@ -404,8 +439,10 @@ export function App() {
         minute: "2-digit",
       });
       setLastSyncedAt(timeStr);
+      setHasGoogleToken(true);
       showToast("Data armada berhasil dicadangkan ke Google Drive!");
     } catch (err: any) {
+      setHasGoogleToken(hasGoogleAccessToken());
       showToast(`Gagal mencadangkan: ${err.message || err}`);
     } finally {
       setIsSyncing(false);
@@ -414,11 +451,17 @@ export function App() {
 
   const handleSyncSpreadsheet = async () => {
     if (!user) {
-      showToast("Silakan hubungkan akun Google terlebih dahulu.");
+      showToast("Silakan masuk akun terlebih dahulu.");
       return;
     }
     try {
       setIsSyncingSpreadsheet(true);
+      if (!hasGoogleAccessToken()) {
+        showToast("Menghubungkan otorisasi Google...");
+        const res = await googleSignIn();
+        if (!res) return;
+        setHasGoogleToken(true);
+      }
       const info = await syncAllToGoogleSpreadsheet({
         vehicles,
         fuelRecords: records,
@@ -427,8 +470,10 @@ export function App() {
         userEmail: user.email || undefined,
       });
       setSpreadsheetInfo(info);
+      setHasGoogleToken(true);
       showToast("Data berhasil disinkronkan ke Google Spreadsheet!");
     } catch (err: any) {
+      setHasGoogleToken(hasGoogleAccessToken());
       showToast(`Gagal sinkron spreadsheet: ${err.message || err}`);
     } finally {
       setIsSyncingSpreadsheet(false);
@@ -437,11 +482,17 @@ export function App() {
 
   const handleRestoreFromDrive = async () => {
     if (!user) {
-      showToast("Silakan hubungkan akun Google Drive terlebih dahulu.");
+      showToast("Silakan masuk akun terlebih dahulu.");
       return;
     }
     try {
       setIsSyncing(true);
+      if (!hasGoogleAccessToken()) {
+        showToast("Menghubungkan otorisasi Google...");
+        const res = await googleSignIn();
+        if (!res) return;
+        setHasGoogleToken(true);
+      }
       const backup = await downloadDataFromGoogleDrive();
       if (backup.vehicles && backup.vehicles.length > 0) {
         setVehicles(backup.vehicles);
@@ -460,8 +511,10 @@ export function App() {
         setServiceHistory(backup.serviceHistory);
         saveStoredServiceHistory(backup.serviceHistory, user.uid);
       }
+      setHasGoogleToken(true);
       showToast("Data cadangan berhasil dipulihkan dari Google Drive!");
     } catch (err: any) {
+      setHasGoogleToken(hasGoogleAccessToken());
       showToast(`Gagal memulihkan data: ${err.message || err}`);
     } finally {
       setIsSyncing(false);
@@ -645,6 +698,7 @@ export function App() {
             onSyncSpreadsheet={handleSyncSpreadsheet}
             onOpenAuth={handleOpenAuth}
             onOpenProfile={handleOpenProfile}
+            hasGoogleToken={hasGoogleToken}
           />
         )}
       </main>
