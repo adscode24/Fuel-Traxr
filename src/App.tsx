@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { User } from "firebase/auth";
 import { Fuel, Loader2 } from "lucide-react";
 import {
@@ -18,18 +18,10 @@ import {
   getStoredServiceHistory,
   saveStoredServiceHistory,
   resetAllAppData,
+  exportDeviceBackup,
+  DeviceBackupPayload,
 } from "./services/storage";
-import { initAuth, googleSignIn, logoutGoogle, hasGoogleAccessToken } from "./services/firebaseAuth";
-import {
-  syncDataToGoogleDrive,
-  downloadDataFromGoogleDrive,
-  SyncPayload,
-} from "./services/driveService";
-import {
-  syncAllToGoogleSpreadsheet,
-  getCachedSpreadsheetInfo,
-  SpreadsheetInfo,
-} from "./services/sheetsService";
+import { initAuth, logoutGoogle } from "./services/firebaseAuth";
 
 import { AndroidHeader } from "./components/AndroidHeader";
 import { BottomNav, NavTab } from "./components/BottomNav";
@@ -42,16 +34,14 @@ import { ManualEntryModal } from "./components/ManualEntryModal";
 import { VehicleSelectorModal } from "./components/VehicleSelectorModal";
 import { LocationPermissionBanner } from "./components/LocationPermissionBanner";
 import { AuthModal } from "./components/AuthModal";
-import { AuthPage } from "./components/AuthPage";
 import { UserProfileModal } from "./components/UserProfileModal";
-import { getStoredUserLocation, UserLocationInfo } from "./services/locationService";
 
 export function App() {
   // Auth state & loading
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
-  // Core Data States
+  // Core Data States (stored locally on device)
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => getStoredVehicles());
   const [activeVehicleId, setActiveVehicleId] = useState<string>(() => {
     const list = getStoredVehicles();
@@ -81,20 +71,10 @@ export function App() {
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FuelRecord | null>(null);
 
-  // Google Drive, Spreadsheet & Auth State
+  // Auth & Profile State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [autoSync, setAutoSync] = useState<boolean>(() => {
-    return localStorage.getItem("bbm_auto_sync") !== "false";
-  });
-  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [hasGoogleToken, setHasGoogleToken] = useState<boolean>(() => hasGoogleAccessToken());
-  const [spreadsheetInfo, setSpreadsheetInfo] = useState<SpreadsheetInfo | null>(() =>
-    getCachedSpreadsheetInfo()
-  );
-  const [isSyncingSpreadsheet, setIsSyncingSpreadsheet] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Show temporary toast notification
@@ -108,244 +88,151 @@ export function App() {
   // Setup Auth Listener with multi-user partitioned data loading
   useEffect(() => {
     const unsubscribe = initAuth(
-      (u, token) => {
+      (u) => {
         setUser(u);
         setAuthLoading(false);
-        setHasGoogleToken(Boolean(token || hasGoogleAccessToken()));
         const scopedVehicles = getStoredVehicles(u.uid);
         setVehicles(scopedVehicles);
         setActiveVehicleId(scopedVehicles[0]?.id || "");
         setRecords(getStoredFuelRecords(u.uid));
         setServices(getStoredServices(u.uid));
         setServiceHistory(getStoredServiceHistory(u.uid));
-        setSpreadsheetInfo(getCachedSpreadsheetInfo());
       },
       () => {
         setUser(null);
         setAuthLoading(false);
-        setHasGoogleToken(false);
         const guestVehicles = getStoredVehicles(null);
         setVehicles(guestVehicles);
         setActiveVehicleId(guestVehicles[0]?.id || "");
         setRecords(getStoredFuelRecords(null));
         setServices(getStoredServices(null));
         setServiceHistory(getStoredServiceHistory(null));
-        setSpreadsheetInfo(getCachedSpreadsheetInfo());
       }
     );
-    return () => unsubscribe();
+
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
   }, []);
 
-  // Save autoSync setting
-  useEffect(() => {
-    localStorage.setItem("bbm_auto_sync", autoSync ? "true" : "false");
-  }, [autoSync]);
-
-  // Active Vehicle Object (null if user has not registered any vehicle yet)
-  const activeVehicle = useMemo<Vehicle | null>(() => {
-    if (vehicles.length === 0) return null;
-    const found = vehicles.find((v) => v.id === activeVehicleId);
-    if (found) return found;
-    return vehicles[0] || null;
+  // Compute active vehicle object
+  const activeVehicle = useMemo(() => {
+    return vehicles.find((v) => v.id === activeVehicleId) || vehicles[0] || null;
   }, [vehicles, activeVehicleId]);
 
-  // Filter records for active vehicle, sorted newest first
-  const activeVehicleRecords = useMemo(() => {
-    if (!activeVehicle) return [];
-    return records
-      .filter((r) => r.vehicleId === activeVehicle.id)
-      .sort((a, b) => b.date.localeCompare(a.date) || b.odometer - a.odometer);
-  }, [records, activeVehicle]);
-
-  // Filter services for active vehicle
-  const activeVehicleServices = useMemo(() => {
-    if (!activeVehicle) return [];
-    return services.filter((s) => s.vehicleId === activeVehicle.id);
-  }, [services, activeVehicle]);
-
-  // Filter service history for active vehicle
-  const activeVehicleServiceHistory = useMemo(() => {
-    if (!activeVehicle) return [];
-    return serviceHistory
-      .filter((h) => h.vehicleId === activeVehicle.id)
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [serviceHistory, activeVehicle]);
-
-  // Payload for Google Drive Sync
-  const getFullPayload = useCallback((): SyncPayload => {
-    return {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      app: "BBM & Servis Kendaraan",
-      vehicles,
-      fuelRecords: records,
-      services,
-      serviceHistory,
-    };
-  }, [vehicles, records, services, serviceHistory]);
-
-  // Trigger background auto sync if enabled (both Google Drive and Google Sheets)
-  const triggerAutoSync = useCallback(async () => {
-    if (!user || !autoSync || !hasGoogleAccessToken()) return;
-    try {
-      setIsSyncing(true);
-      const payload: SyncPayload = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        app: "BBM & Servis Kendaraan",
-        vehicles,
-        fuelRecords: records,
-        services,
-        serviceHistory,
-      };
-      await syncDataToGoogleDrive(payload);
-      const timeStr = new Date().toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setLastSyncedAt(timeStr);
-      setHasGoogleToken(true);
-    } catch (err: any) {
-      if (err?.message?.includes("kedaluwarsa") || err?.message?.includes("belum aktif")) {
-        setHasGoogleToken(false);
-      }
-      console.warn("Auto-sync to Google Drive skipped or failed:", err);
-    } finally {
-      setIsSyncing(false);
-    }
-
-    // Auto-sync to Google Spreadsheet
-    try {
-      const sheetRes = await syncAllToGoogleSpreadsheet({
-        vehicles,
-        fuelRecords: records,
-        serviceHistory,
-        services,
-        userEmail: user.email || undefined,
-      });
-      setSpreadsheetInfo(sheetRes);
-      setHasGoogleToken(true);
-    } catch (sheetErr: any) {
-      if (sheetErr?.message?.includes("kedaluwarsa") || sheetErr?.message?.includes("belum aktif")) {
-        setHasGoogleToken(false);
-      }
-      console.warn("Auto-sync to Google Sheets skipped or failed:", sheetErr);
-    }
-  }, [user, autoSync, vehicles, records, services, serviceHistory]);
-
-  // Sync to drive and spreadsheet whenever records, vehicles, services, or serviceHistory change
+  // If vehicle was deleted or activeVehicleId is invalid, reset to first vehicle
   useEffect(() => {
-    if (user && autoSync) {
-      const timer = setTimeout(() => {
-        triggerAutoSync();
-      }, 1500);
-      return () => clearTimeout(timer);
+    if (vehicles.length > 0 && !vehicles.some((v) => v.id === activeVehicleId)) {
+      setActiveVehicleId(vehicles[0].id);
     }
-  }, [records, vehicles, services, serviceHistory, user, autoSync, triggerAutoSync]);
+  }, [vehicles, activeVehicleId]);
 
-  // Add or Edit Fuel Record
-  const handleSaveFuelRecord = (data: Partial<FuelRecord>) => {
-    if (!activeVehicle && vehicles.length === 0) {
-      setIsVehicleModalOpen(true);
-      showToast("Silakan daftarkan kendaraan Anda terlebih dahulu.");
+  // Fuel Records Handlers
+  const handleSaveFuelRecord = (recordData: Partial<FuelRecord>) => {
+    if (!activeVehicle) {
+      showToast("Silakan daftarkan atau pilih kendaraan terlebih dahulu.");
       return;
     }
 
-    const targetVehicleId = activeVehicle?.id || vehicles[0]?.id || "";
-    let updatedRecords: FuelRecord[];
-    const isEdit = Boolean(data.id);
+    const odoNum = Number(recordData.odometer) || 0;
 
-    if (isEdit) {
-      updatedRecords = records.map((r) =>
-        r.id === data.id ? ({ ...r, ...data } as FuelRecord) : r
+    if (editingRecord) {
+      // Update existing record
+      const updated = records.map((r) =>
+        r.id === editingRecord.id
+          ? {
+              ...r,
+              ...recordData,
+              vehicleId: activeVehicle.id,
+              date: recordData.date || r.date,
+              odometer: odoNum,
+              fuelType: recordData.fuelType || r.fuelType,
+              octaneOrGrade: recordData.octaneOrGrade || r.octaneOrGrade,
+              liters: Number(recordData.liters) || r.liters,
+              pricePerLiter: Number(recordData.pricePerLiter) || r.pricePerLiter,
+              totalCost: Number(recordData.totalCost) || r.totalCost,
+              stationName: recordData.stationName || r.stationName,
+              location: recordData.location || r.location,
+              isFullTank: recordData.isFullTank ?? r.isFullTank,
+              notes: recordData.notes || r.notes,
+            }
+          : r
       );
+      setRecords(updated);
+      saveStoredFuelRecords(updated, user?.uid);
+      showToast("Catatan pengisian BBM berhasil diperbarui.");
     } else {
-      // Calculate distance traveled and efficiency compared to previous record
-      const prevRecords = records
-        .filter((r) => r.vehicleId === targetVehicleId)
-        .sort((a, b) => b.odometer - a.odometer);
-
-      const lastRecord = prevRecords[0];
-      let distanceTraveled: number | undefined;
-      let fuelEfficiencyKmPerL: number | undefined;
-      let costPerKm: number | undefined;
-
-      const newOdometer = Number(data.odometer);
-      const liters = Number(data.liters);
-      const totalCost = Number(data.totalCost);
-
-      if (lastRecord && newOdometer > lastRecord.odometer) {
-        distanceTraveled = newOdometer - lastRecord.odometer;
-        if (liters > 0) {
-          fuelEfficiencyKmPerL = Number((distanceTraveled / liters).toFixed(2));
-        }
-        if (distanceTraveled > 0) {
-          costPerKm = Number((totalCost / distanceTraveled).toFixed(2));
-        }
-      }
-
+      // Create new record
+      const nowIso = new Date().toISOString();
       const newRecord: FuelRecord = {
-        id: `f-${Date.now()}`,
-        vehicleId: targetVehicleId,
-        date: data.date || new Date().toISOString().slice(0, 10),
-        time: data.time || new Date().toTimeString().slice(0, 5),
-        odometer: newOdometer,
-        distanceTraveled,
-        fuelType: data.fuelType || "Pertalite",
-        octaneOrGrade: data.octaneOrGrade || "90",
-        liters,
-        pricePerLiter: Number(data.pricePerLiter),
-        totalCost,
-        stationName: data.stationName || "SPBU Pertamina",
-        location: data.location || "Indonesia",
-        isFullTank: data.isFullTank ?? true,
-        notes: data.notes,
-        fuelEfficiencyKmPerL,
-        costPerKm,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        id: `rec-${Date.now()}`,
+        vehicleId: activeVehicle.id,
+        date: recordData.date || nowIso.split("T")[0],
+        time: recordData.time,
+        odometer: odoNum,
+        fuelType: recordData.fuelType || "Bensin",
+        octaneOrGrade: recordData.octaneOrGrade,
+        liters: Number(recordData.liters) || 0,
+        pricePerLiter: Number(recordData.pricePerLiter) || 0,
+        totalCost: Number(recordData.totalCost) || 0,
+        stationName: recordData.stationName || "SPBU",
+        location: recordData.location || "-",
+        isFullTank: recordData.isFullTank ?? true,
+        notes: recordData.notes,
+        createdAt: nowIso,
+        updatedAt: nowIso,
       };
 
-      updatedRecords = [newRecord, ...records];
+      const updated = [newRecord, ...records];
+      setRecords(updated);
+      saveStoredFuelRecords(updated, user?.uid);
+
+      // Automatically update vehicle's current odometer if this entry is higher
+      if (odoNum > (activeVehicle.currentOdometer || 0)) {
+        const updatedVehicles = vehicles.map((v) =>
+          v.id === activeVehicle.id ? { ...v, currentOdometer: odoNum } : v
+        );
+        setVehicles(updatedVehicles);
+        saveStoredVehicles(updatedVehicles, user?.uid);
+      }
+
+      showToast("Catatan pengisian BBM berhasil disimpan di perangkat.");
     }
-
-    setRecords(updatedRecords);
-    saveStoredFuelRecords(updatedRecords, user?.uid);
-
-    // Update vehicle's current odometer if newer
-    if (activeVehicle && data.odometer && data.odometer > activeVehicle.currentOdometer) {
-      const updatedVehicles = vehicles.map((v) =>
-        v.id === activeVehicle.id
-          ? { ...v, currentOdometer: Number(data.odometer) }
-          : v
-      );
-      setVehicles(updatedVehicles);
-      saveStoredVehicles(updatedVehicles, user?.uid);
-    }
-
-    showToast(
-      isEdit ? "Catatan BBM berhasil diperbarui!" : "Catatan BBM berhasil disimpan!"
-    );
   };
 
-  // Delete Fuel Record
-  const handleDeleteRecord = (id: string) => {
-    const updated = records.filter((r) => r.id !== id);
+  const handleDeleteFuelRecord = (recordId: string) => {
+    const updated = records.filter((r) => r.id !== recordId);
     setRecords(updated);
     saveStoredFuelRecords(updated, user?.uid);
-    showToast("Catatan pengisian BBM dihapus.");
+    showToast("Catatan pengisian BBM telah dihapus.");
   };
 
-  // Service History Handlers
-  const handleAddServiceHistory = (
-    entry: Omit<ServiceHistoryEntry, "id" | "createdAt">
-  ) => {
-    const newEntry: ServiceHistoryEntry = {
-      ...entry,
-      id: `sh-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-    const updated = [newEntry, ...serviceHistory];
+  // Service Reminders Handlers
+  const handleSaveServiceItem = (item: ServiceItem) => {
+    const exists = services.some((s) => s.id === item.id);
+    const updated = exists
+      ? services.map((s) => (s.id === item.id ? item : s))
+      : [...services, item];
+
+    setServices(updated);
+    saveStoredServices(updated, user?.uid);
+    showToast(`Pengingat servis "${item.title}" disimpan.`);
+  };
+
+  const handleDeleteServiceItem = (serviceId: string) => {
+    const updated = services.filter((s) => s.id !== serviceId);
+    setServices(updated);
+    saveStoredServices(updated, user?.uid);
+    showToast("Jadwal servis dihapus.");
+  };
+
+  // Service History & Expenses Handlers
+  const handleSaveServiceHistory = (entry: ServiceHistoryEntry) => {
+    const exists = serviceHistory.some((h) => h.id === entry.id);
+    const updated = exists
+      ? serviceHistory.map((h) => (h.id === entry.id ? entry : h))
+      : [entry, ...serviceHistory];
+
     setServiceHistory(updated);
     saveStoredServiceHistory(updated, user?.uid);
     showToast(`Riwayat biaya "${entry.title}" dicatat.`);
@@ -378,161 +265,46 @@ export function App() {
     showToast(`Data kendaraan "${v.name}" diperbarui.`);
   };
 
-  // Google Drive Connection & Restore Handlers
-  const handleConnectGoogle = async () => {
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
-        setHasGoogleToken(true);
-        showToast(`Berhasil menghubungkan Google Drive & Spreadsheet (${res.user.email})`);
-        // Immediately sync spreadsheet in background
-        try {
-          setIsSyncingSpreadsheet(true);
-          const info = await syncAllToGoogleSpreadsheet({
-            vehicles,
-            fuelRecords: records,
-            serviceHistory,
-            services,
-            userEmail: res.user.email || undefined,
-          });
-          setSpreadsheetInfo(info);
-        } catch (e) {
-          console.warn("Spreadsheet initial sync warning:", e);
-        } finally {
-          setIsSyncingSpreadsheet(false);
-        }
-      }
-    } catch (err: any) {
-      showToast(`Gagal menghubungkan Google: ${err.message || err}`);
-    }
+  // Device Backup: Export JSON directly to device
+  const handleExportDeviceBackup = () => {
+    exportDeviceBackup(vehicles, records, services, serviceHistory);
+    showToast("Berkas cadangan (.json) berhasil diunduh ke perangkat Anda!");
   };
 
-  const handleDisconnectGoogle = async () => {
-    try {
-      await logoutGoogle();
-      setUser(null);
-      setHasGoogleToken(false);
-      showToast("Koneksi Google telah diputuskan.");
-    } catch (err: any) {
-      showToast(`Gagal memutuskan koneksi: ${err.message || err}`);
+  // Device Backup: Import JSON file from device
+  const handleImportDeviceBackup = (backup: Partial<DeviceBackupPayload>) => {
+    if (backup.vehicles && Array.isArray(backup.vehicles) && backup.vehicles.length > 0) {
+      setVehicles(backup.vehicles);
+      saveStoredVehicles(backup.vehicles, user?.uid);
+      setActiveVehicleId(backup.vehicles[0].id);
     }
+    if (backup.fuelRecords && Array.isArray(backup.fuelRecords)) {
+      setRecords(backup.fuelRecords);
+      saveStoredFuelRecords(backup.fuelRecords, user?.uid);
+    }
+    if (backup.services && Array.isArray(backup.services)) {
+      setServices(backup.services);
+      saveStoredServices(backup.services, user?.uid);
+    }
+    if (backup.serviceHistory && Array.isArray(backup.serviceHistory)) {
+      setServiceHistory(backup.serviceHistory);
+      saveStoredServiceHistory(backup.serviceHistory, user?.uid);
+    }
+    showToast("Data cadangan berhasil dipulihkan ke perangkat!");
   };
 
-  const handleManualSync = async () => {
-    if (!user) {
-      showToast("Silakan masuk akun terlebih dahulu.");
-      return;
-    }
-    try {
-      setIsSyncing(true);
-      if (!hasGoogleAccessToken()) {
-        showToast("Menghubungkan otorisasi Google...");
-        const res = await googleSignIn();
-        if (!res) return;
-        setHasGoogleToken(true);
-      }
-      const payload = getFullPayload();
-      await syncDataToGoogleDrive(payload);
-      const timeStr = new Date().toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setLastSyncedAt(timeStr);
-      setHasGoogleToken(true);
-      showToast("Data armada berhasil dicadangkan ke Google Drive!");
-    } catch (err: any) {
-      setHasGoogleToken(hasGoogleAccessToken());
-      showToast(`Gagal mencadangkan: ${err.message || err}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleSyncSpreadsheet = async () => {
-    if (!user) {
-      showToast("Silakan masuk akun terlebih dahulu.");
-      return;
-    }
-    try {
-      setIsSyncingSpreadsheet(true);
-      if (!hasGoogleAccessToken()) {
-        showToast("Menghubungkan otorisasi Google...");
-        const res = await googleSignIn();
-        if (!res) return;
-        setHasGoogleToken(true);
-      }
-      const info = await syncAllToGoogleSpreadsheet({
-        vehicles,
-        fuelRecords: records,
-        serviceHistory,
-        services,
-        userEmail: user.email || undefined,
-      });
-      setSpreadsheetInfo(info);
-      setHasGoogleToken(true);
-      showToast("Data berhasil disinkronkan ke Google Spreadsheet!");
-    } catch (err: any) {
-      setHasGoogleToken(hasGoogleAccessToken());
-      showToast(`Gagal sinkron spreadsheet: ${err.message || err}`);
-    } finally {
-      setIsSyncingSpreadsheet(false);
-    }
-  };
-
-  const handleRestoreFromDrive = async () => {
-    if (!user) {
-      showToast("Silakan masuk akun terlebih dahulu.");
-      return;
-    }
-    try {
-      setIsSyncing(true);
-      if (!hasGoogleAccessToken()) {
-        showToast("Menghubungkan otorisasi Google...");
-        const res = await googleSignIn();
-        if (!res) return;
-        setHasGoogleToken(true);
-      }
-      const backup = await downloadDataFromGoogleDrive();
-      if (backup.vehicles && backup.vehicles.length > 0) {
-        setVehicles(backup.vehicles);
-        saveStoredVehicles(backup.vehicles, user.uid);
-        setActiveVehicleId(backup.vehicles[0].id);
-      }
-      if (backup.fuelRecords) {
-        setRecords(backup.fuelRecords);
-        saveStoredFuelRecords(backup.fuelRecords, user.uid);
-      }
-      if (backup.services) {
-        setServices(backup.services);
-        saveStoredServices(backup.services, user.uid);
-      }
-      if (backup.serviceHistory) {
-        setServiceHistory(backup.serviceHistory);
-        saveStoredServiceHistory(backup.serviceHistory, user.uid);
-      }
-      setHasGoogleToken(true);
-      showToast("Data cadangan berhasil dipulihkan dari Google Drive!");
-    } catch (err: any) {
-      setHasGoogleToken(hasGoogleAccessToken());
-      showToast(`Gagal memulihkan data: ${err.message || err}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // Reset all data handler for SettingsPage
+  // Reset all local app data
   const handleResetAllData = () => {
-    resetAllAppData(user?.uid);
-    const freshVehicles = getStoredVehicles(user?.uid);
-    setVehicles(freshVehicles);
-    setActiveVehicleId(freshVehicles[0]?.id || "");
+    resetAllAppData();
+    setVehicles(getStoredVehicles());
     setRecords([]);
     setServices([]);
     setServiceHistory([]);
-    showToast("Semua data berhasil dibersihkan.");
+    setActiveVehicleId("");
+    showToast("Semua data lokal telah dibersihkan.");
   };
 
+  // Auth & Profile UI Handlers
   const handleOpenAuth = (mode: "login" | "register" = "login") => {
     setAuthModalMode(mode);
     setIsAuthModalOpen(true);
@@ -544,58 +316,44 @@ export function App() {
 
   const handleAuthSuccess = (u: User) => {
     setUser(u);
-    const scopedVehicles = getStoredVehicles(u.uid);
-    setVehicles(scopedVehicles);
-    setActiveVehicleId(scopedVehicles[0]?.id || "");
-    setRecords(getStoredFuelRecords(u.uid));
-    setServices(getStoredServices(u.uid));
-    setServiceHistory(getStoredServiceHistory(u.uid));
-    setSpreadsheetInfo(getCachedSpreadsheetInfo());
+    setIsAuthModalOpen(false);
     showToast(`Selamat datang, ${u.displayName || u.email}!`);
   };
 
-  const handleLoggedOut = () => {
-    setUser(null);
-    const guestVehicles = getStoredVehicles(null);
-    setVehicles(guestVehicles);
-    setActiveVehicleId(guestVehicles[0]?.id || "");
-    setRecords(getStoredFuelRecords(null));
-    setServices(getStoredServices(null));
-    setServiceHistory(getStoredServiceHistory(null));
-    setSpreadsheetInfo(getCachedSpreadsheetInfo());
-    showToast("Anda telah keluar dari akun.");
+  const handleLoggedOut = async () => {
+    try {
+      await logoutGoogle();
+      setUser(null);
+      showToast("Berhasil keluar dari akun.");
+    } catch (err: any) {
+      showToast(`Gagal keluar: ${err.message || err}`);
+    }
   };
 
-  // 1. Initial Auth Loading State
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center animate-pulse mb-3 shadow-lg shadow-blue-500/25">
-          <Fuel className="w-6 h-6" />
+        <div className="flex items-center gap-3 text-blue-500 mb-3">
+          <Fuel className="w-8 h-8 animate-bounce" />
+          <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-        <div className="flex items-center gap-2 text-slate-300 text-xs font-medium">
-          <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-          <span>Memuat aplikasi...</span>
+        <div className="text-white font-bold text-sm tracking-wide">
+          Memuat Catatan BBM &amp; Servis...
         </div>
       </div>
     );
   }
 
-  // 2. Unauthenticated State: Mandatory Login / Register Page per request
-  if (!user) {
-    return (
-      <AuthPage
-        onAuthSuccess={(loggedInUser) => {
-          handleAuthSuccess(loggedInUser);
-        }}
-      />
-    );
-  }
-
-  // 3. Authenticated User View
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0f141f] text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors selection:bg-blue-600 selection:text-white">
-      {/* Android Top App Bar */}
+    <div className="min-h-screen bg-slate-100 dark:bg-[#0c1017] text-slate-900 dark:text-slate-100 flex flex-col transition-colors">
+      {/* Toast Notification Banner */}
+      {toastMessage && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs font-semibold rounded-full shadow-lg border border-slate-700/60 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2 max-w-sm text-center">
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Persistent Mobile Android-Style App Header */}
       <AndroidHeader
         activeVehicle={activeVehicle}
         onOpenVehicleSelector={() => setIsVehicleModalOpen(true)}
@@ -604,65 +362,58 @@ export function App() {
         onOpenProfile={handleOpenProfile}
       />
 
-      {/* Floating Toast Alert */}
-      {toastMessage && (
-        <div className="fixed top-16 inset-x-0 z-50 flex justify-center px-4 pointer-events-none animate-in fade-in slide-in-from-top-2">
-          <div className="bg-slate-900 dark:bg-[#1e2738] border border-slate-700 dark:border-blue-500/50 text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            {toastMessage}
-          </div>
-        </div>
-      )}
-
-      {/* Main Content Area with generous bottom padding for floating dock nav */}
-      <main className="flex-1 max-w-2xl w-full mx-auto p-3.5 sm:p-4 pb-28 sm:pb-32">
-        {/* Tab 1: Home (Halaman Utama / Grafik & Statistik) */}
+      {/* Main Tab Content */}
+      <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5">
+        {/* Tab 1: Dashboard / Home */}
         {activeTab === "home" && (
           <StatsDashboard
+            records={records}
             vehicle={activeVehicle}
-            records={activeVehicleRecords}
-            serviceHistory={activeVehicleServiceHistory}
-            fuelUnit={fuelUnit}
-            onOpenManualAdd={() => {
+            serviceHistory={serviceHistory}
+            onOpenManualEntry={() => {
               setEditingRecord(null);
               setIsManualModalOpen(true);
             }}
-            onNavigateTab={setActiveTab}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
+            fuelUnit={fuelUnit}
           />
         )}
 
-        {/* Tab 2: Catatan Pengisian BBM */}
-        {activeTab === "log" && (
+        {/* Tab 2: Bensin (Fuel Records & Log) */}
+        {activeTab === "bensin" && (
           <MileageLog
+            records={records}
             vehicle={activeVehicle}
-            records={activeVehicleRecords}
-            fuelUnit={fuelUnit}
-            onOpenManualAdd={() => {
+            onOpenManualEntry={() => {
               setEditingRecord(null);
               setIsManualModalOpen(true);
             }}
-            onDeleteRecord={handleDeleteRecord}
             onEditRecord={(record) => {
               setEditingRecord(record);
               setIsManualModalOpen(true);
             }}
+            onDeleteRecord={handleDeleteFuelRecord}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
+            fuelUnit={fuelUnit}
           />
         )}
 
-        {/* Tab 3: Riwayat Biaya Manual (Service, Top Up Etoll, Lainnya) */}
+        {/* Tab 3: Biaya (Services & Maintenance) */}
         {activeTab === "biaya" && (
           <BiayaPage
             vehicle={activeVehicle}
-            serviceHistory={activeVehicleServiceHistory}
-            onAddExpense={handleAddServiceHistory}
+            services={services}
+            serviceHistory={serviceHistory}
+            fuelRecords={records}
+            onSaveService={handleSaveServiceItem}
+            onDeleteService={handleDeleteServiceItem}
+            onSaveExpense={handleSaveServiceHistory}
             onDeleteExpense={handleDeleteServiceHistory}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />
         )}
 
-        {/* Tab 4: Laporan Page (with Date Range & Vehicle Filters + Exports) */}
+        {/* Tab 4: Laporan Page */}
         {activeTab === "report" && (
           <ReportPage
             vehicle={activeVehicle}
@@ -675,7 +426,7 @@ export function App() {
           />
         )}
 
-        {/* Tab 5: Setting (Google Drive, Spreadsheet, Satuan Unit Ukur, Tema, Reset Data) */}
+        {/* Tab 5: Setting (Device Storage, Satuan Unit Ukur, Tema, Reset Data) */}
         {activeTab === "setting" && (
           <SettingsPage
             fuelUnit={fuelUnit}
@@ -684,21 +435,12 @@ export function App() {
             records={records}
             serviceHistory={serviceHistory}
             onResetAllData={handleResetAllData}
+            onExportDeviceBackup={handleExportDeviceBackup}
+            onImportDeviceBackup={handleImportDeviceBackup}
             user={user}
-            autoSync={autoSync}
-            onToggleAutoSync={setAutoSync}
-            isSyncing={isSyncing}
-            lastSyncedAt={lastSyncedAt}
-            onConnectGoogle={handleConnectGoogle}
-            onDisconnectGoogle={handleDisconnectGoogle}
-            onManualSync={handleManualSync}
-            onRestoreFromDrive={handleRestoreFromDrive}
-            spreadsheetInfo={spreadsheetInfo}
-            isSyncingSpreadsheet={isSyncingSpreadsheet}
-            onSyncSpreadsheet={handleSyncSpreadsheet}
             onOpenAuth={handleOpenAuth}
             onOpenProfile={handleOpenProfile}
-            hasGoogleToken={hasGoogleToken}
+            onSignOut={handleLoggedOut}
           />
         )}
       </main>

@@ -301,3 +301,76 @@ export function calculateMonthlySummaries(records: FuelRecord[]): MonthlySummary
       };
     });
 }
+
+export interface DeviceBackupPayload {
+  app: string;
+  version: number;
+  exportedAt: string;
+  storageType: "device_local";
+  vehicles: Vehicle[];
+  fuelRecords: FuelRecord[];
+  services: ServiceItem[];
+  serviceHistory: ServiceHistoryEntry[];
+}
+
+/**
+ * Downloads a complete JSON backup file of all vehicles, fuel records, services,
+ * and service history directly to the user's device memory.
+ */
+export function exportDeviceBackup(
+  vehicles: Vehicle[],
+  fuelRecords: FuelRecord[],
+  services: ServiceItem[],
+  serviceHistory: ServiceHistoryEntry[]
+): void {
+  const payload: DeviceBackupPayload = {
+    app: "Catatan BBM & Servis Kendaraan",
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    storageType: "device_local",
+    vehicles,
+    fuelRecords,
+    services,
+    serviceHistory,
+  };
+
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `catatan_bbm_backup_${dateStr}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Reads and parses a JSON backup file uploaded from the user's device.
+ */
+export async function parseDeviceBackupFile(file: File): Promise<Partial<DeviceBackupPayload>> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (typeof parsed !== "object" || parsed === null) {
+          throw new Error("Format file cadangan tidak valid.");
+        }
+        resolve(parsed);
+      } catch (err: any) {
+        reject(new Error("Gagal membaca file cadangan: Format JSON tidak sesuai."));
+      }
+    };
+    reader.onerror = () => reject(new Error("Gagal membaca file dari perangkat."));
+    reader.readAsText(file);
+  });
+}
+

@@ -1,6 +1,6 @@
 {
   "name": "Catatan BBM & Servis",
-  "description": "Aplikasi pencatatan BBM dan servis armada kendaraan dengan info harga SPBU terkini, rute SPBU terdekat Google Maps, analisis efisiensi km/l, laporan PDF/Excel, dan pencadangan Google Drive.",
+  "description": "Aplikasi pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
