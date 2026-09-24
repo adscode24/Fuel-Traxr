@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Droplet,
   TrendingUp,
@@ -8,13 +8,11 @@ import {
   Edit2,
   Eye,
   Plus,
-  Calendar,
-  Layers,
   Search,
   X,
-  Tag,
-  AlertTriangle,
   Car,
+  Fuel,
+  Info,
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit } from "../types";
 import { StationLogo } from "./StationLogo";
@@ -23,7 +21,8 @@ interface Props {
   vehicle: Vehicle | null;
   records: FuelRecord[];
   fuelUnit?: FuelEfficiencyUnit;
-  onOpenManualAdd: () => void;
+  onOpenManualAdd?: () => void;
+  onOpenManualEntry?: () => void;
   onOpenRegisterVehicle?: () => void;
   onDeleteRecord: (id: string) => void;
   onEditRecord: (record: FuelRecord) => void;
@@ -31,9 +30,10 @@ interface Props {
 
 export const MileageLog: React.FC<Props> = ({
   vehicle,
-  records,
+  records = [],
   fuelUnit = "km/l",
   onOpenManualAdd,
+  onOpenManualEntry,
   onOpenRegisterVehicle,
   onDeleteRecord,
   onEditRecord,
@@ -43,45 +43,111 @@ export const MileageLog: React.FC<Props> = ({
   const [recordToDelete, setRecordToDelete] = useState<FuelRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Filter records by station name, notes, or date
-  const filteredRecords = records.filter((r) => {
-    if (!searchQuery.trim()) return true;
+  // Support both prop names seamlessly
+  const handleOpenAdd = onOpenManualAdd || onOpenManualEntry || (() => {});
+
+  // Records for active vehicle (or all if no vehicle or if active vehicle filter returns empty while records exist)
+  const vehicleRecords = useMemo(() => {
+    if (!Array.isArray(records)) return [];
+    if (!vehicle) return records;
+    const matching = records.filter((r) => !r.vehicleId || r.vehicleId === vehicle.id);
+    // If user has records in total but none with exact vehicleId, show all records to prevent accidental blank state
+    return matching.length > 0 ? matching : records;
+  }, [records, vehicle]);
+
+  // Filter records by search query (SPBU name, notes, date, fuel type, location)
+  const filteredRecords = useMemo(() => {
+    if (!searchQuery.trim()) return vehicleRecords;
     const q = searchQuery.toLowerCase().trim();
 
-    const matchesStation = r.stationName.toLowerCase().includes(q);
-    const matchesNotes = Boolean(r.notes && r.notes.toLowerCase().includes(q));
-    const matchesDate = r.date.toLowerCase().includes(q);
-    const matchesLocation = r.location.toLowerCase().includes(q);
+    return vehicleRecords.filter((r) => {
+      const matchesStation = (r.stationName || "").toLowerCase().includes(q);
+      const matchesNotes = Boolean(r.notes && r.notes.toLowerCase().includes(q));
+      const matchesDate = (r.date || "").toLowerCase().includes(q);
+      const matchesLocation = (r.location || "").toLowerCase().includes(q);
+      const matchesFuelType = Boolean(r.fuelType && r.fuelType.toLowerCase().includes(q));
 
-    return matchesStation || matchesNotes || matchesDate || matchesLocation;
-  });
-
-  // Group by Month (e.g. "September 2026", "Agustus 2026")
-  const groupedByMonth: Record<string, FuelRecord[]> = {};
-  filteredRecords.forEach((record) => {
-    const d = new Date(record.date);
-    const monthYear = d.toLocaleDateString("id-ID", {
-      month: "long",
-      year: "numeric",
+      return matchesStation || matchesNotes || matchesDate || matchesLocation || matchesFuelType;
     });
-    if (!groupedByMonth[monthYear]) groupedByMonth[monthYear] = [];
-    groupedByMonth[monthYear].push(record);
-  });
+  }, [vehicleRecords, searchQuery]);
 
-  // Helper formatting for Indonesian Rupiah
-  const formatRupiah = (val: number, withDecimals = true) => {
-    const parts = val.toFixed(withDecimals ? 2 : 0).split(".");
+  // Sort descending by date (newest first), then by odometer descending
+  const sortedRecords = useMemo(() => {
+    return [...filteredRecords].sort((a, b) => {
+      const dateA = a.date || "";
+      const dateB = b.date || "";
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+      return (b.odometer || 0) - (a.odometer || 0);
+    });
+  }, [filteredRecords]);
+
+  // Group by Month sorted chronologically descending (e.g. "2026-09" -> September 2026)
+  const monthGroups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; records: FuelRecord[] }>();
+
+    sortedRecords.forEach((record) => {
+      const rawDate = record.date || "";
+      let monthKey = "Lainnya";
+      let monthLabel = "Catatan Lainnya";
+
+      if (rawDate && rawDate.length >= 7) {
+        monthKey = rawDate.slice(0, 7); // "YYYY-MM"
+        const [yearStr, monthStr] = monthKey.split("-");
+        const y = parseInt(yearStr, 10);
+        const m = parseInt(monthStr, 10);
+        if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+          const d = new Date(y, m - 1, 1);
+          monthLabel = d.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          });
+        } else {
+          monthLabel = monthKey;
+        }
+      }
+
+      if (!map.has(monthKey)) {
+        map.set(monthKey, { key: monthKey, label: monthLabel, records: [] });
+      }
+      map.get(monthKey)!.records.push(record);
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
+  }, [sortedRecords]);
+
+  // Safe formatting for Indonesian Rupiah (prevents .toFixed crashes)
+  const formatRupiah = (val?: number, withDecimals = true) => {
+    if (val === undefined || val === null || isNaN(val)) {
+      return withDecimals ? "Rp0,00" : "Rp0";
+    }
+    const num = Number(val) || 0;
+    const parts = num.toFixed(withDecimals ? 2 : 0).split(".");
     const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return withDecimals ? `Rp${integerPart},${parts[1] || "00"}` : `Rp${integerPart}`;
   };
 
+  // Safe decimal formatter
   const formatDecimals = (val?: number) => {
     if (val === undefined || val === null || isNaN(val)) return "-";
-    return val.toFixed(2).replace(".", ",");
+    return Number(val).toFixed(2).replace(".", ",");
   };
 
-  // If user has not registered vehicle yet, show registration prompt
-  if (!vehicle) {
+  // Safe date formatter (DD/MM/YYYY)
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr || "-";
+    }
+  };
+
+  // If user has not registered vehicle yet AND has 0 records, show registration prompt
+  if (!vehicle && records.length === 0) {
     return (
       <div className="space-y-4 pb-28">
         <div className="bg-white dark:bg-[#151c2c] p-7 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/60 text-center space-y-4">
@@ -96,13 +162,22 @@ export const MileageLog: React.FC<Props> = ({
               Anda belum mendaftarkan kendaraan. Daftarkan mobil atau motor Anda sekarang untuk mulai mencatat riwayat pengisian BBM.
             </p>
           </div>
-          <button
-            onClick={onOpenRegisterVehicle}
-            className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Daftarkan Kendaraan Anda</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+            <button
+              onClick={onOpenRegisterVehicle}
+              className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Daftarkan Kendaraan Anda</span>
+            </button>
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition"
+            >
+              <Fuel className="w-4 h-4" />
+              <span>Catat Pengisian BBM Langsung</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -110,6 +185,22 @@ export const MileageLog: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 pb-28 transition-colors">
+      {/* Informative Banner if vehicle is not yet selected but records exist */}
+      {!vehicle && records.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300 px-4 py-2.5 rounded-xl flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>Menampilkan seluruh riwayat pengisian ({records.length} catatan).</span>
+          </div>
+          <button
+            onClick={onOpenRegisterVehicle}
+            className="text-xs font-semibold underline text-amber-600 dark:text-amber-400 hover:text-amber-700"
+          >
+            Pilih Kendaraan
+          </button>
+        </div>
+      )}
+
       {/* Search Bar & Add Button */}
       <div className="bg-white dark:bg-[#161c2a] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
         <div className="flex items-center gap-2">
@@ -119,7 +210,7 @@ export const MileageLog: React.FC<Props> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari SPBU, catatan, atau tanggal (contoh: Pertamina, luar kota, 2026-08)..."
+              placeholder="Cari SPBU, jenis BBM, catatan, tanggal (contoh: Pertamina, Pertalite, 2026-09)..."
               className="w-full bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-9 py-2.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition"
             />
             {searchQuery && (
@@ -133,7 +224,7 @@ export const MileageLog: React.FC<Props> = ({
             )}
           </div>
           <button
-            onClick={onOpenManualAdd}
+            onClick={handleOpenAdd}
             className="flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 shrink-0"
             title="Tambah Pengisian BBM"
           >
@@ -150,10 +241,13 @@ export const MileageLog: React.FC<Props> = ({
                 <span className="font-semibold text-blue-600 dark:text-blue-400">
                   {filteredRecords.length}
                 </span>{" "}
-                dari {records.length} pengisian cocok
+                dari {vehicleRecords.length} pengisian cocok
               </>
             ) : (
-              <span>Filter riwayat: nama SPBU, catatan isi, atau tanggal</span>
+              <span>
+                Total <strong>{vehicleRecords.length}</strong> catatan pengisian BBM
+                {vehicle?.name ? ` untuk ${vehicle.name}` : ""}
+              </span>
             )}
           </div>
 
@@ -191,14 +285,12 @@ export const MileageLog: React.FC<Props> = ({
             {searchQuery ? <Search className="w-7 h-7" /> : <Droplet className="w-7 h-7" />}
           </div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1">
-            {searchQuery
-              ? "Pencarian Tidak Ditemukan"
-              : "Belum Ada Data Bensin"}
+            {searchQuery ? "Pencarian Tidak Ditemukan" : "Belum Ada Riwayat Bensin"}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-4">
             {searchQuery
-              ? `Tidak ada data pengisian BBM yang cocok dengan kata kunci "${searchQuery}". Coba periksa ejaan SPBU, tanggal, atau catatan.`
-              : "Catat pengisian bensin pertama Anda untuk mulai memantau pengeluaran dan konsumsi bahan bakar."}
+              ? `Tidak ada data pengisian BBM yang cocok dengan kata kunci "${searchQuery}". Coba periksa kata kunci SPBU, tanggal, atau jenis BBM.`
+              : "Catat pengisian bensin pertama Anda untuk mulai memantau konsumsi bahan bakar, jarak tempuh, dan pengeluaran kendaraan."}
           </p>
           <div className="flex items-center justify-center gap-2">
             {searchQuery ? (
@@ -210,7 +302,7 @@ export const MileageLog: React.FC<Props> = ({
               </button>
             ) : (
               <button
-                onClick={onOpenManualAdd}
+                onClick={handleOpenAdd}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow transition"
               >
                 <Plus className="w-4 h-4" />
@@ -222,23 +314,23 @@ export const MileageLog: React.FC<Props> = ({
       )}
 
       {/* Grouped Month Lists */}
-      {Object.entries(groupedByMonth).map(([monthYear, monthRecords]) => {
+      {monthGroups.map(({ key: monthKey, label: monthLabel, records: monthRecords }) => {
         // Calculate Month Summary
-        const monthCost = monthRecords.reduce((acc, r) => acc + r.totalCost, 0);
-        const monthLiters = monthRecords.reduce((acc, r) => acc + r.liters, 0);
+        const monthCost = monthRecords.reduce((acc, r) => acc + (Number(r.totalCost) || 0), 0);
+        const monthLiters = monthRecords.reduce((acc, r) => acc + (Number(r.liters) || 0), 0);
         const monthDist = monthRecords.reduce(
-          (acc, r) => acc + (r.distanceTraveled || 0),
+          (acc, r) => acc + (Number(r.distanceTraveled) || 0),
           0
         );
         const monthAvgKmL =
           monthLiters > 0 && monthDist > 0 ? (monthDist / monthLiters).toFixed(2) : "-";
 
         return (
-          <div key={monthYear} className="space-y-3">
+          <div key={monthKey} className="space-y-3">
             {/* Month Header Banner */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1 pt-2">
               <h2 className="text-sm font-bold tracking-wide text-slate-800 dark:text-slate-200 capitalize">
-                {monthYear}
+                {monthLabel}
               </h2>
               <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                 <span className="bg-slate-100 dark:bg-[#1c2334] px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -257,7 +349,7 @@ export const MileageLog: React.FC<Props> = ({
             <div className="space-y-3">
               {monthRecords.map((record) => {
                 const isMenuOpen = activeMenuId === record.id;
-                const formattedDate = record.date.split("-").reverse().join("-");
+                const formattedDate = formatDisplayDate(record.date);
 
                 return (
                   <div
@@ -269,7 +361,7 @@ export const MileageLog: React.FC<Props> = ({
                       <div className="flex items-start space-x-3.5">
                         {/* Circular Fuel Brand Logo matching the SPBU station name */}
                         <StationLogo
-                          stationName={record.stationName}
+                          stationName={record.stationName || "SPBU"}
                           fuelCategory={vehicle?.fuelCategory}
                           className="w-11 h-11"
                         />
@@ -290,7 +382,7 @@ export const MileageLog: React.FC<Props> = ({
                       <div className="text-right flex flex-col items-end">
                         <div className="flex items-center gap-1">
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-100 font-mono">
-                            {record.odometer.toLocaleString("id-ID")} km
+                            {(record.odometer || 0).toLocaleString("id-ID")} km
                           </span>
                           {/* Menu button */}
                           <div className="relative ml-1">
@@ -345,7 +437,7 @@ export const MileageLog: React.FC<Props> = ({
                         </div>
 
                         {/* Delta KM */}
-                        {record.distanceTraveled !== undefined ? (
+                        {record.distanceTraveled !== undefined && record.distanceTraveled > 0 ? (
                           <span className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                             +{record.distanceTraveled} km
                           </span>
@@ -361,15 +453,16 @@ export const MileageLog: React.FC<Props> = ({
                     <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 pl-1">
                       <Droplet className="w-4 h-4 text-blue-500 dark:text-blue-400 fill-blue-500/20 shrink-0" />
                       <span className="font-mono font-medium">
-                        {formatDecimals(record.liters)} l
+                        {formatDecimals(record.liters)} L
                       </span>
                       <span className="text-slate-400">→</span>
                       <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
-                        {formatRupiah(record.pricePerLiter)}/l
+                        {formatRupiah(record.pricePerLiter)}/L
                       </span>
-                      {record.octaneOrGrade && (
-                        <span className="text-slate-500 dark:text-slate-400">
-                          ({record.octaneOrGrade})
+                      {record.fuelType && (
+                        <span className="text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
+                          {record.fuelType}
+                          {record.octaneOrGrade ? ` (${record.octaneOrGrade})` : ""}
                         </span>
                       )}
                     </div>
@@ -426,9 +519,9 @@ export const MileageLog: React.FC<Props> = ({
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pl-1 pt-0.5 truncate">
                       <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                       <span className="truncate">
-                        {record.location
-                          ? `${record.location} - ${record.stationName}`
-                          : record.stationName}
+                        {record.location && record.location !== "-"
+                          ? `${record.location} • ${record.stationName || "SPBU"}`
+                          : record.stationName || "SPBU"}
                       </span>
                     </div>
                   </div>
@@ -469,7 +562,7 @@ export const MileageLog: React.FC<Props> = ({
       <div className="fixed bottom-24 right-4 sm:right-6 z-30">
         <button
           type="button"
-          onClick={onOpenManualAdd}
+          onClick={handleOpenAdd}
           className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-2xl bg-blue-600 hover:bg-blue-500 text-white transition active:scale-95 shadow-blue-600/30"
           title="Tambah Pengisian BBM"
         >
@@ -501,17 +594,18 @@ export const MileageLog: React.FC<Props> = ({
                 <span className="text-slate-500 dark:text-slate-400">SPBU</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                   <StationLogo
-                    stationName={recordToDelete.stationName}
+                    stationName={recordToDelete.stationName || "SPBU"}
                     fuelCategory={vehicle?.fuelCategory}
                     className="w-4 h-4 !border-none !shadow-none inline-block"
                   />
-                  {recordToDelete.stationName}
+                  {recordToDelete.stationName || "SPBU"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 dark:text-slate-400">Tanggal</span>
                 <span className="font-medium text-slate-700 dark:text-slate-300">
-                  {recordToDelete.date} {recordToDelete.time ? `• ${recordToDelete.time}` : ""}
+                  {formatDisplayDate(recordToDelete.date)}{" "}
+                  {recordToDelete.time ? `• ${recordToDelete.time}` : ""}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -523,7 +617,8 @@ export const MileageLog: React.FC<Props> = ({
               <div className="flex items-center justify-between">
                 <span className="text-slate-500 dark:text-slate-400">Volume & Odometer</span>
                 <span className="font-mono text-slate-700 dark:text-slate-300">
-                  {recordToDelete.liters} L • {recordToDelete.odometer.toLocaleString("id-ID")} km
+                  {formatDecimals(recordToDelete.liters)} L •{" "}
+                  {(recordToDelete.odometer || 0).toLocaleString("id-ID")} km
                 </span>
               </div>
             </div>

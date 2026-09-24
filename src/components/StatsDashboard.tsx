@@ -38,6 +38,7 @@ interface Props {
   serviceHistory?: ServiceHistoryEntry[];
   fuelUnit?: FuelEfficiencyUnit;
   onOpenManualAdd?: () => void;
+  onOpenManualEntry?: () => void;
   onOpenRegisterVehicle?: () => void;
   onNavigateTab?: (tab: any) => void;
   onSelectPriceForEntry?: (fuelData: Partial<FuelRecord>) => void;
@@ -49,10 +50,12 @@ export const StatsDashboard: React.FC<Props> = ({
   serviceHistory = [],
   fuelUnit = "km/l",
   onOpenManualAdd,
+  onOpenManualEntry,
   onOpenRegisterVehicle,
   onNavigateTab,
   onSelectPriceForEntry,
 }) => {
+  const handleOpenAddAction = onOpenManualAdd || onOpenManualEntry;
   const [selectedMetric, setSelectedMetric] = useState<
     "expense" | "efficiency" | "volume"
   >("expense");
@@ -416,7 +419,7 @@ export const StatsDashboard: React.FC<Props> = ({
           {/* Quick Action Button */}
           <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80">
             <button
-              onClick={onOpenManualAdd}
+              onClick={handleOpenAddAction}
               className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs shadow-xs transition active:scale-98"
             >
               <Plus className="w-4 h-4" />
@@ -674,7 +677,7 @@ export const StatsDashboard: React.FC<Props> = ({
           {onNavigateTab && (
             <button
               type="button"
-              onClick={() => onNavigateTab("log")}
+              onClick={() => onNavigateTab("bensin")}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
             >
               <span>Lihat Semua</span>
@@ -692,7 +695,7 @@ export const StatsDashboard: React.FC<Props> = ({
               Belum ada riwayat pengisian.
             </p>
             <button
-              onClick={onOpenManualAdd}
+              onClick={handleOpenAddAction}
               className="text-xs font-semibold text-blue-600 dark:text-blue-400"
             >
               + Catat Pengisian Pertama

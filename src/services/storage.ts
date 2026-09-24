@@ -36,11 +36,13 @@ export function purgeDummyDataIfPresent(userId?: string | null): void {
       if (rawRecords) {
         try {
           const parsed = JSON.parse(rawRecords);
-          if (Array.isArray(parsed) && parsed.some((r: any) => r.id?.startsWith("rec-"))) {
-            localStorage.setItem(recordsKey, JSON.stringify([]));
+          const DUMMY_REC_IDS = new Set(["rec-1", "rec-2", "rec-3", "rec-4", "rec-5", "rec-dummy", "rec-demo"]);
+          if (Array.isArray(parsed)) {
+            const cleaned = parsed.filter((r: any) => !DUMMY_REC_IDS.has(r.id));
+            localStorage.setItem(recordsKey, JSON.stringify(cleaned));
           }
         } catch (_) {
-          localStorage.setItem(recordsKey, JSON.stringify([]));
+          // Keep existing if parse fails
         }
       }
 
@@ -49,11 +51,13 @@ export function purgeDummyDataIfPresent(userId?: string | null): void {
       if (rawHistory) {
         try {
           const parsedH = JSON.parse(rawHistory);
-          if (Array.isArray(parsedH) && parsedH.some((h: any) => h.id?.startsWith("hist-"))) {
-            localStorage.setItem(historyKey, JSON.stringify([]));
+          const DUMMY_HIST_IDS = new Set(["hist-1", "hist-2", "hist-3", "hist-4", "hist-5"]);
+          if (Array.isArray(parsedH)) {
+            const cleanedH = parsedH.filter((h: any) => !DUMMY_HIST_IDS.has(h.id));
+            localStorage.setItem(historyKey, JSON.stringify(cleanedH));
           }
         } catch (_) {
-          localStorage.setItem(historyKey, JSON.stringify([]));
+          // Keep existing if parse fails
         }
       }
 

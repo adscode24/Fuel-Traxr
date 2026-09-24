@@ -13,6 +13,7 @@ import {
   saveStoredVehicles,
   getStoredFuelRecords,
   saveStoredFuelRecords,
+  recalculateRecords,
   getStoredServices,
   saveStoredServices,
   getStoredServiceHistory,
@@ -129,9 +130,29 @@ export function App() {
 
   // Fuel Records Handlers
   const handleSaveFuelRecord = (recordData: Partial<FuelRecord>) => {
-    if (!activeVehicle) {
-      showToast("Silakan daftarkan atau pilih kendaraan terlebih dahulu.");
-      return;
+    let targetVehicle = activeVehicle;
+    if (!targetVehicle) {
+      if (vehicles.length > 0) {
+        targetVehicle = vehicles[0];
+        setActiveVehicleId(vehicles[0].id);
+      } else {
+        // Auto create default vehicle so user can start recording immediately
+        const defaultVeh: Vehicle = {
+          id: `v-${Date.now()}`,
+          name: "Kendaraan Saya",
+          type: "car",
+          licensePlate: "-",
+          fuelTankCapacity: 45,
+          defaultFuelType: recordData.fuelType || "Pertalite",
+          fuelCategory: "Bensin",
+          currentOdometer: Number(recordData.odometer) || 0,
+        };
+        const updatedVehicles = [defaultVeh];
+        setVehicles(updatedVehicles);
+        setActiveVehicleId(defaultVeh.id);
+        saveStoredVehicles(updatedVehicles, user?.uid);
+        targetVehicle = defaultVeh;
+      }
     }
 
     const odoNum = Number(recordData.odometer) || 0;
@@ -143,7 +164,7 @@ export function App() {
           ? {
               ...r,
               ...recordData,
-              vehicleId: activeVehicle.id,
+              vehicleId: targetVehicle.id,
               date: recordData.date || r.date,
               odometer: odoNum,
               fuelType: recordData.fuelType || r.fuelType,
@@ -155,18 +176,20 @@ export function App() {
               location: recordData.location || r.location,
               isFullTank: recordData.isFullTank ?? r.isFullTank,
               notes: recordData.notes || r.notes,
+              updatedAt: new Date().toISOString(),
             }
           : r
       );
-      setRecords(updated);
-      saveStoredFuelRecords(updated, user?.uid);
+      const calculated = recalculateRecords(updated);
+      setRecords(calculated);
+      saveStoredFuelRecords(calculated, user?.uid);
       showToast("Catatan pengisian BBM berhasil diperbarui.");
     } else {
       // Create new record
       const nowIso = new Date().toISOString();
       const newRecord: FuelRecord = {
         id: `rec-${Date.now()}`,
-        vehicleId: activeVehicle.id,
+        vehicleId: targetVehicle.id,
         date: recordData.date || nowIso.split("T")[0],
         time: recordData.time,
         odometer: odoNum,
@@ -184,13 +207,14 @@ export function App() {
       };
 
       const updated = [newRecord, ...records];
-      setRecords(updated);
-      saveStoredFuelRecords(updated, user?.uid);
+      const calculated = recalculateRecords(updated);
+      setRecords(calculated);
+      saveStoredFuelRecords(calculated, user?.uid);
 
       // Automatically update vehicle's current odometer if this entry is higher
-      if (odoNum > (activeVehicle.currentOdometer || 0)) {
+      if (odoNum > (targetVehicle.currentOdometer || 0)) {
         const updatedVehicles = vehicles.map((v) =>
-          v.id === activeVehicle.id ? { ...v, currentOdometer: odoNum } : v
+          v.id === targetVehicle.id ? { ...v, currentOdometer: odoNum } : v
         );
         setVehicles(updatedVehicles);
         saveStoredVehicles(updatedVehicles, user?.uid);
@@ -202,8 +226,9 @@ export function App() {
 
   const handleDeleteFuelRecord = (recordId: string) => {
     const updated = records.filter((r) => r.id !== recordId);
-    setRecords(updated);
-    saveStoredFuelRecords(updated, user?.uid);
+    const calculated = recalculateRecords(updated);
+    setRecords(calculated);
+    saveStoredFuelRecords(calculated, user?.uid);
     showToast("Catatan pengisian BBM telah dihapus.");
   };
 
@@ -370,8 +395,17 @@ export function App() {
             records={records}
             vehicle={activeVehicle}
             serviceHistory={serviceHistory}
+            onOpenManualAdd={() => {
+              setEditingRecord(null);
+              setIsManualModalOpen(true);
+            }}
             onOpenManualEntry={() => {
               setEditingRecord(null);
+              setIsManualModalOpen(true);
+            }}
+            onNavigateTab={(tab: NavTab) => setActiveTab(tab)}
+            onSelectPriceForEntry={(fuelData) => {
+              setEditingRecord(fuelData as any);
               setIsManualModalOpen(true);
             }}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
@@ -380,10 +414,14 @@ export function App() {
         )}
 
         {/* Tab 2: Bensin (Fuel Records & Log) */}
-        {activeTab === "bensin" && (
+        {(activeTab === "bensin" || activeTab === "log") && (
           <MileageLog
             records={records}
             vehicle={activeVehicle}
+            onOpenManualAdd={() => {
+              setEditingRecord(null);
+              setIsManualModalOpen(true);
+            }}
             onOpenManualEntry={() => {
               setEditingRecord(null);
               setIsManualModalOpen(true);
@@ -402,12 +440,15 @@ export function App() {
         {activeTab === "biaya" && (
           <BiayaPage
             vehicle={activeVehicle}
-            services={services}
             serviceHistory={serviceHistory}
-            fuelRecords={records}
-            onSaveService={handleSaveServiceItem}
-            onDeleteService={handleDeleteServiceItem}
-            onSaveExpense={handleSaveServiceHistory}
+            onAddExpense={(entry) => {
+              const newEntry: ServiceHistoryEntry = {
+                ...entry,
+                id: `exp-${Date.now()}`,
+                createdAt: new Date().toISOString(),
+              };
+              handleSaveServiceHistory(newEntry);
+            }}
             onDeleteExpense={handleDeleteServiceHistory}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
           />

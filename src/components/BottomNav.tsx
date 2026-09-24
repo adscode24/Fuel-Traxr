@@ -1,7 +1,7 @@
 import React from "react";
 import { Home, Droplet, Wallet, FileText, Settings } from "lucide-react";
 
-export type NavTab = "home" | "log" | "biaya" | "report" | "setting";
+export type NavTab = "home" | "bensin" | "log" | "biaya" | "report" | "setting";
 
 interface Props {
   activeTab: NavTab;
@@ -11,11 +11,22 @@ interface Props {
 export const BottomNav: React.FC<Props> = ({ activeTab, onChangeTab }) => {
   const tabs: { id: NavTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: "home", label: "Home", icon: Home },
-    { id: "log", label: "Bensin", icon: Droplet },
+    { id: "bensin", label: "Bensin", icon: Droplet },
     { id: "biaya", label: "Biaya", icon: Wallet },
     { id: "report", label: "Laporan", icon: FileText },
     { id: "setting", label: "Pengaturan", icon: Settings },
   ];
+
+  const isTabActive = (tabId: NavTab) => {
+    if (activeTab === tabId) return true;
+    if (
+      (tabId === "bensin" || tabId === "log") &&
+      (activeTab === "bensin" || activeTab === "log")
+    ) {
+      return true;
+    }
+    return false;
+  };
 
   return (
     <nav
@@ -26,7 +37,7 @@ export const BottomNav: React.FC<Props> = ({ activeTab, onChangeTab }) => {
         <div className="grid grid-cols-5 gap-1 items-center">
           {tabs.map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
+            const isActive = isTabActive(tab.id);
             return (
               <button
                 key={tab.id}
