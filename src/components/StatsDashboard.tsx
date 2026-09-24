@@ -2,6 +2,8 @@ import React, { useState, useMemo } from "react";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
@@ -305,6 +307,157 @@ export const StatsDashboard: React.FC<Props> = ({
       fillCount: m.fillCount,
     };
   });
+
+  // 6-Month Odometer Progress & Usage Pattern State & Calculation
+  const [odometerChartMode, setOdometerChartMode] = useState<
+    "cumulative" | "monthly"
+  >("cumulative");
+
+  const odometer6MonthsData = useMemo(() => {
+    // Reference date: latest date in records/services or today
+    let refDate = new Date();
+    const allDates = [
+      ...records.map((r) => r.date),
+      ...serviceHistory.map((s) => s.date),
+    ].filter((d): d is string => Boolean(d));
+
+    if (allDates.length > 0) {
+      const sortedDates = [...allDates].sort().reverse();
+      const latest = new Date(sortedDates[0]);
+      if (!isNaN(latest.getTime())) {
+        refDate = latest;
+      }
+    }
+
+    const currYear = refDate.getFullYear();
+    const currMonth = refDate.getMonth(); // 0-indexed
+
+    // Generate 6 consecutive months up to reference month
+    const monthSlots: { year: number; month: number; key: string; label: string }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(currYear, currMonth - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const key = `${y}-${String(m + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("id-ID", { month: "short", year: "2-digit" });
+      monthSlots.push({ year: y, month: m, key, label });
+    }
+
+    // Vehicle-scoped records
+    const vRecords = vehicle
+      ? records.filter((r) => !r.vehicleId || r.vehicleId === vehicle.id)
+      : records;
+    const vServices = vehicle
+      ? serviceHistory.filter((s) => !s.vehicleId || s.vehicleId === vehicle.id)
+      : serviceHistory;
+
+    // Collect all records and services with odometer
+    const entries: { date: string; odo: number; dist: number }[] = [];
+    vRecords.forEach((r) => {
+      if (r.odometer && r.date) {
+        entries.push({
+          date: r.date,
+          odo: Number(r.odometer) || 0,
+          dist: Number(r.distanceTraveled) || 0,
+        });
+      }
+    });
+    vServices.forEach((s) => {
+      if (s.odometer && s.date) {
+        entries.push({
+          date: s.date,
+          odo: Number(s.odometer) || 0,
+          dist: 0,
+        });
+      }
+    });
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+
+    const currentVehOdo =
+      vehicle?.currentOdometer || (entries.length > 0 ? entries[entries.length - 1].odo : 0);
+
+    const data = monthSlots.map((slot, idx) => {
+      const inMonth = entries.filter((e) => e.date.startsWith(slot.key));
+      const inMonthRecords = vRecords.filter((r) => r.date && r.date.startsWith(slot.key));
+
+      let monthDistance = inMonthRecords.reduce(
+        (acc, r) => acc + (Number(r.distanceTraveled) || 0),
+        0
+      );
+      if (monthDistance === 0 && inMonth.length >= 2) {
+        monthDistance = inMonth[inMonth.length - 1].odo - inMonth[0].odo;
+      }
+
+      let monthOdo = 0;
+      if (inMonth.length > 0) {
+        monthOdo = inMonth[inMonth.length - 1].odo;
+      } else {
+        const prior = entries.filter((e) => e.date <= `${slot.key}-31`);
+        if (prior.length > 0) {
+          monthOdo = prior[prior.length - 1].odo;
+        } else if (idx === monthSlots.length - 1 && currentVehOdo > 0) {
+          monthOdo = currentVehOdo;
+        }
+      }
+
+      return {
+        monthKey: slot.key,
+        monthName: slot.label,
+        odometer: monthOdo > 0 ? monthOdo : null,
+        distance: Math.max(0, monthDistance),
+        entriesCount: inMonth.length,
+      };
+    });
+
+    // Forward fill known odometer
+    let prevOdo = 0;
+    for (let i = 0; i < data.length; i++) {
+      if (data[i].odometer !== null && data[i].odometer! > 0) {
+        prevOdo = data[i].odometer!;
+      } else if (prevOdo > 0) {
+        data[i].odometer = prevOdo + data[i].distance;
+        prevOdo = data[i].odometer!;
+      }
+    }
+
+    // Backward fill if earliest months had no records yet
+    let nextOdo = 0;
+    for (let i = data.length - 1; i >= 0; i--) {
+      if (data[i].odometer !== null && data[i].odometer! > 0) {
+        nextOdo = data[i].odometer!;
+      } else if (nextOdo > 0) {
+        data[i].odometer = Math.max(0, nextOdo - data[i].distance);
+        nextOdo = data[i].odometer!;
+      }
+    }
+
+    // Fallback if all are null/0 but vehicle has currentOdometer
+    if (data.every((d) => !d.odometer || d.odometer === 0) && currentVehOdo > 0) {
+      data[data.length - 1].odometer = currentVehOdo;
+    }
+
+    return data;
+  }, [records, serviceHistory, vehicle]);
+
+  // Statistics for 6-month usage patterns
+  const odometer6MonthsStats = useMemo(() => {
+    const totalDist = odometer6MonthsData.reduce((acc, d) => acc + d.distance, 0);
+    const validOdos = odometer6MonthsData
+      .map((d) => d.odometer)
+      .filter((o): o is number => typeof o === "number" && o > 0);
+    const minOdo = validOdos.length > 0 ? Math.min(...validOdos) : 0;
+    const maxOdo = validOdos.length > 0 ? Math.max(...validOdos) : vehicle?.currentOdometer || 0;
+    const effectiveDistance = totalDist > 0 ? totalDist : maxOdo > minOdo ? maxOdo - minOdo : 0;
+    const avgMonthly = Math.round(effectiveDistance / 6);
+    const avgDaily = Math.round(effectiveDistance / 180);
+
+    return {
+      totalDistance: effectiveDistance,
+      avgMonthly,
+      avgDaily,
+      latestOdometer: maxOdo,
+    };
+  }, [odometer6MonthsData, vehicle?.currentOdometer]);
 
   // Recent 3 records for quick home feed
   const recentRecords = [...records]
@@ -786,6 +939,227 @@ export const StatsDashboard: React.FC<Props> = ({
                 />
               </AreaChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Odometer Progress Chart Over Last 6 Months */}
+      {vehicle && (
+        <div className="bg-white dark:bg-[#151c2c] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <Gauge className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Progres Odometer (6 Bulan Terakhir)
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Pola jarak tempuh &amp; pemakaian kendaraan {vehicle.name}
+                </p>
+              </div>
+            </div>
+
+            {/* Segmented View Toggle */}
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-[#0e1420] rounded-xl border border-slate-200 dark:border-slate-800 text-xs self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setOdometerChartMode("cumulative")}
+                className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
+                  odometerChartMode === "cumulative"
+                    ? "bg-white dark:bg-emerald-600 text-emerald-600 dark:text-white font-semibold shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                Akumulasi (KM)
+              </button>
+              <button
+                type="button"
+                onClick={() => setOdometerChartMode("monthly")}
+                className={`px-3 py-1 rounded-lg font-medium transition cursor-pointer ${
+                  odometerChartMode === "monthly"
+                    ? "bg-white dark:bg-emerald-600 text-emerald-600 dark:text-white font-semibold shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                Jarak Tempuh / Bln (+KM)
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Quick Stat Metric Badges */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-100 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">
+                Odometer Terkini
+              </span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-slate-900 dark:text-white block mt-0.5 truncate">
+                {odometer6MonthsStats.latestOdometer.toLocaleString("id-ID")} km
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-100 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">
+                Total Jarak 6 Bulan
+              </span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 block mt-0.5 truncate">
+                +{odometer6MonthsStats.totalDistance.toLocaleString("id-ID")} km
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-100 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">
+                Rata-rata / Bulan
+              </span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-blue-600 dark:text-blue-400 block mt-0.5 truncate">
+                ~{odometer6MonthsStats.avgMonthly.toLocaleString("id-ID")} km
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-100 dark:border-slate-800/80">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">
+                Rata-rata / Hari
+              </span>
+              <span className="text-xs sm:text-sm font-bold font-mono text-slate-700 dark:text-slate-300 block mt-0.5 truncate">
+                ~{odometer6MonthsStats.avgDaily.toLocaleString("id-ID")} km
+              </span>
+            </div>
+          </div>
+
+          {/* Interactive Chart */}
+          <div className="h-56 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              {odometerChartMode === "cumulative" ? (
+                <AreaChart
+                  data={odometer6MonthsData}
+                  margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="odometerAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#334155"
+                    opacity={0.15}
+                  />
+                  <XAxis
+                    dataKey="monthName"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    domain={["auto", "auto"]}
+                    tickFormatter={(val) =>
+                      val >= 1000 ? `${Math.round(val / 1000)}k` : `${val}`
+                    }
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 shadow-lg space-y-1">
+                            <div className="font-bold text-slate-200">
+                              {d.monthName} ({d.monthKey})
+                            </div>
+                            <div className="text-emerald-400 font-mono font-semibold">
+                              Odometer:{" "}
+                              {d.odometer !== null
+                                ? `${d.odometer.toLocaleString("id-ID")} km`
+                                : "-"}
+                            </div>
+                            <div className="text-blue-400 font-mono">
+                              Jarak Bulan Ini: +{d.distance.toLocaleString("id-ID")} km
+                            </div>
+                            {d.entriesCount > 0 && (
+                              <div className="text-[10px] text-slate-400">
+                                {d.entriesCount} catatan tercatat
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="odometer"
+                    stroke="#10b981"
+                    strokeWidth={2.5}
+                    fillOpacity={1}
+                    fill="url(#odometerAreaGrad)"
+                  />
+                </AreaChart>
+              ) : (
+                <BarChart
+                  data={odometer6MonthsData}
+                  margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    vertical={false}
+                    stroke="#334155"
+                    opacity={0.15}
+                  />
+                  <XAxis
+                    dataKey="monthName"
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => `${val}km`}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const d = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white text-xs p-2.5 rounded-xl border border-slate-700 shadow-lg space-y-1">
+                            <div className="font-bold text-slate-200">
+                              {d.monthName} ({d.monthKey})
+                            </div>
+                            <div className="text-emerald-400 font-mono font-semibold">
+                              Jarak Tempuh: +{d.distance.toLocaleString("id-ID")} km
+                            </div>
+                            {d.odometer !== null && (
+                              <div className="text-slate-300 font-mono text-[11px]">
+                                Posisi Odometer: {d.odometer.toLocaleString("id-ID")} km
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Bar dataKey="distance" fill="#10b981" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+
+          <div className="pt-1 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span>
+              💡 Rata-rata pemakaian <b>~{odometer6MonthsStats.avgMonthly.toLocaleString("id-ID")} km/bulan</b>
+            </span>
+            <span className="text-[10px] text-slate-400">
+              Periode 6 bulan terakhir
+            </span>
           </div>
         </div>
       )}

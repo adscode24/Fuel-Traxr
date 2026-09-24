@@ -41,8 +41,17 @@ export const AndroidHeader: React.FC<Props> = ({
             className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 dark:bg-[#182133] dark:hover:bg-[#1f2b42] border border-slate-200 dark:border-slate-700/80 transition active:scale-98 group text-left min-w-0"
             title="Ganti atau Kelola Kendaraan"
           >
-            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
-              {activeVehicle.type === "car" ? (
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+              {activeVehicle.image ? (
+                <img
+                  src={activeVehicle.image}
+                  alt={activeVehicle.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : activeVehicle.type === "car" ? (
                 <Car className="w-4 h-4" />
               ) : (
                 <Bike className="w-4 h-4" />

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Car, Bike, Plus, Check, X, Edit2, Gauge } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Car, Bike, Plus, Check, X, Edit2, Gauge, Camera, Upload, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Vehicle } from "../types";
 
 interface Props {
@@ -37,6 +37,55 @@ export const VehicleSelectorModal: React.FC<Props> = ({
   const [fuelCategory, setFuelCategory] = useState<"Bensin" | "Diesel" | "Elektrik">("Bensin");
   const [tankCapacity, setTankCapacity] = useState(45);
   const [currentOdometer, setCurrentOdometer] = useState(70000);
+  const [image, setImage] = useState<string>("");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [editShowUrlInput, setEditShowUrlInput] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Compress and read image file to compact data URL
+  const processImageFile = (
+    file: File,
+    onSuccess: (dataUrl: string) => void
+  ) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 500;
+        const MAX_HEIGHT = 500;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+          onSuccess(dataUrl);
+        } else {
+          onSuccess(event.target?.result as string);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!isOpen) return null;
 
@@ -61,12 +110,15 @@ export const VehicleSelectorModal: React.FC<Props> = ({
           : "Pertalite",
       fuelTankCapacity: Number(tankCapacity),
       currentOdometer: Number(currentOdometer),
+      image: image.trim() || undefined,
     });
 
     setName("");
     setLicensePlate("");
     setFuelCategory("Bensin");
     setTankCapacity(45);
+    setImage("");
+    setShowUrlInput(false);
     setShowAddForm(false);
   };
 
@@ -118,20 +170,40 @@ export const VehicleSelectorModal: React.FC<Props> = ({
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isSelected
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                      }`}
-                    >
-                      {v.type === "car" ? (
-                        <Car className="w-5 h-5" />
-                      ) : (
-                        <Bike className="w-5 h-5" />
-                      )}
-                    </div>
-                      <div>
+                    {v.image ? (
+                      <div
+                        className={`w-11 h-11 rounded-xl overflow-hidden shrink-0 border relative bg-slate-150 dark:bg-slate-800 ${
+                          isSelected
+                            ? "border-blue-500 ring-2 ring-blue-500/30 shadow-xs"
+                            : "border-slate-200 dark:border-slate-700"
+                        }`}
+                      >
+                        <img
+                          src={v.image}
+                          alt={v.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // If broken, replace with fallback
+                            (e.target as HTMLElement).style.display = "none";
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                          isSelected
+                            ? "bg-blue-600 text-white"
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                        }`}
+                      >
+                        {v.type === "car" ? (
+                          <Car className="w-5 h-5" />
+                        ) : (
+                          <Bike className="w-5 h-5" />
+                        )}
+                      </div>
+                    )}
+                    <div>
                       <div className="text-sm font-semibold flex items-center gap-2">
                         <span>{v.name}</span>
                         {v.licensePlate && (
@@ -289,6 +361,99 @@ export const VehicleSelectorModal: React.FC<Props> = ({
               />
             </div>
 
+            {/* Foto / Gambar Kendaraan (Opsional) */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Foto Kendaraan (Opsional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  {showUrlInput ? "Unggah File Gambar" : "Tautan Gambar / URL"}
+                </button>
+              </div>
+
+              {image ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80">
+                  <div className="w-13 h-13 rounded-lg overflow-hidden shrink-0 border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800">
+                    <img src={image} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      Foto Kendaraan Terpilih
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Akan ditampilkan sebagai identitas visual kendaraan
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+                      title="Ganti Foto"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImage("")}
+                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition cursor-pointer"
+                      title="Hapus Foto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : showUrlInput ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder="https://example.com/foto-mobil.jpg"
+                    className="flex-1 bg-slate-50 dark:bg-[#10141e] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#10141e]"
+                  />
+                  {image && (
+                    <button
+                      type="button"
+                      onClick={() => setImage("")}
+                      className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 bg-slate-50/50 dark:bg-[#10141e]/50 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-medium transition cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4 text-blue-500" />
+                    <span>Pilih Foto Kendaraan dari Galeri / Kamera</span>
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    processImageFile(file, (dataUrl) => setImage(dataUrl));
+                  }
+                }}
+              />
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -407,6 +572,106 @@ export const VehicleSelectorModal: React.FC<Props> = ({
                   className="w-full bg-slate-50 dark:bg-[#10141e] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#10141e] font-mono"
                 />
               </div>
+            </div>
+
+            {/* Foto / Gambar Kendaraan (Opsional) */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Foto Kendaraan (Opsional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setEditShowUrlInput(!editShowUrlInput)}
+                  className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  {editShowUrlInput ? "Unggah File Gambar" : "Tautan Gambar / URL"}
+                </button>
+              </div>
+
+              {editingVehicle.image ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80">
+                  <div className="w-13 h-13 rounded-lg overflow-hidden shrink-0 border border-slate-300 dark:border-slate-700 bg-slate-200 dark:bg-slate-800">
+                    <img src={editingVehicle.image} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      Foto Kendaraan Aktif
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Tampil pada daftar kendaraan dan bilah aplikasi
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-slate-200 dark:hover:bg-slate-800 transition cursor-pointer"
+                      title="Ganti Foto"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingVehicle({ ...editingVehicle, image: undefined })}
+                      className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition cursor-pointer"
+                      title="Hapus Foto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : editShowUrlInput ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="url"
+                    value={editingVehicle.image || ""}
+                    onChange={(e) =>
+                      setEditingVehicle({
+                        ...editingVehicle,
+                        image: e.target.value.trim() || undefined,
+                      })
+                    }
+                    placeholder="https://example.com/foto-mobil.jpg"
+                    className="flex-1 bg-slate-50 dark:bg-[#10141e] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#10141e]"
+                  />
+                  {editingVehicle.image && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingVehicle({ ...editingVehicle, image: undefined })}
+                      className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => editFileInputRef.current?.click()}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 bg-slate-50/50 dark:bg-[#10141e]/50 text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-xs font-medium transition cursor-pointer"
+                  >
+                    <Camera className="w-4 h-4 text-blue-500" />
+                    <span>Pilih Foto Kendaraan dari Galeri / Kamera</span>
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={editFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    processImageFile(file, (dataUrl) =>
+                      setEditingVehicle({ ...editingVehicle, image: dataUrl })
+                    );
+                  }
+                }}
+              />
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
