@@ -14,119 +14,123 @@ import {
   FileText,
   AlertCircle,
   Car,
+  Edit2,
+  ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { Vehicle, ServiceHistoryEntry, ExpenseCategory } from "../types";
 
 interface Props {
   vehicle: Vehicle | null;
   serviceHistory: ServiceHistoryEntry[];
-  onAddExpense: (
+  onAddExpense?: (
     entry: Omit<ServiceHistoryEntry, "id" | "createdAt">
   ) => void;
+  onSaveExpense?: (entry: ServiceHistoryEntry) => void;
   onDeleteExpense: (id: string) => void;
   onOpenRegisterVehicle?: () => void;
 }
 
 export const BiayaPage: React.FC<Props> = ({
   vehicle,
-  serviceHistory,
+  serviceHistory = [],
   onAddExpense,
+  onSaveExpense,
   onDeleteExpense,
   onOpenRegisterVehicle,
 }) => {
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<ServiceHistoryEntry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
-  // Form State for Manual Expense
+  // Form State for Adding / Editing Expense
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [category, setCategory] = useState<ExpenseCategory>("Service");
+  const [category, setCategory] = useState<string>("Service");
   const [title, setTitle] = useState("");
   const [cost, setCost] = useState("");
-  const [odometer, setOdometer] = useState<string>(
-    vehicle?.currentOdometer ? String(vehicle.currentOdometer) : ""
-  );
+  const [odometer, setOdometer] = useState<string>("");
   const [workshop, setWorkshop] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Format currency in Rupiah
-  const formatRupiah = (val: number) => {
-    return `Rp${Math.round(val).toLocaleString("id-ID")}`;
+  // Format currency in Indonesian Rupiah
+  const formatRupiah = (val: number, withDecimals = false) => {
+    if (isNaN(val) || val === undefined || val === null) return "Rp0";
+    const num = Math.round(val);
+    return `Rp${num.toLocaleString("id-ID")}`;
   };
 
-  // Filter history strictly for current active vehicle
-  const vehicleExpenses = useMemo(() => {
-    if (!vehicle) return [];
-    return serviceHistory
-      .filter((h) => h.vehicleId === vehicle.id)
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [serviceHistory, vehicle?.id]);
-
-  // Aggregate totals
-  const totals = useMemo(() => {
-    let totalAll = 0;
-    let totalService = 0;
-    let totalEtoll = 0;
-    let totalLainnya = 0;
-
-    vehicleExpenses.forEach((exp) => {
-      const amount = exp.cost || 0;
-      totalAll += amount;
-
-      const catLower = (exp.category || "").toLowerCase();
-      if (
-        catLower === "service" ||
-        catLower === "oil" ||
-        catLower === "brake" ||
-        catLower === "tires" ||
-        catLower === "transmission" ||
-        catLower === "filter" ||
-        catLower === "general"
-      ) {
-        totalService += amount;
-      } else if (catLower === "top up etoll" || catLower === "etoll") {
-        totalEtoll += amount;
-      } else {
-        totalLainnya += amount;
+  // Safe date formatter (DD/MM/YYYY)
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
       }
-    });
+      return dateStr;
+    } catch {
+      return dateStr || "-";
+    }
+  };
 
-    return { totalAll, totalService, totalEtoll, totalLainnya };
-  }, [vehicleExpenses]);
+  // Filter history strictly for current active vehicle (or all if no active vehicle)
+  const vehicleExpenses = useMemo(() => {
+    if (!Array.isArray(serviceHistory)) return [];
+    if (!vehicle) return serviceHistory;
+    const matching = serviceHistory.filter((h) => !h.vehicleId || h.vehicleId === vehicle.id);
+    return matching.length > 0 ? matching : serviceHistory;
+  }, [serviceHistory, vehicle]);
 
-  // Filtered expenses list
+  // Filtered expenses list by active category filter and search query
   const filteredList = useMemo(() => {
     return vehicleExpenses.filter((item) => {
-      // Category filter
+      const itemCat = (item.category || "Lainnya").toLowerCase();
+
+      // Category filter check
       if (activeFilter !== "Semua") {
-        const itemCat = item.category || "Lainnya";
         if (activeFilter === "Service") {
-          const catLower = itemCat.toLowerCase();
           const isServ =
-            catLower === "service" ||
-            catLower === "oil" ||
-            catLower === "brake" ||
-            catLower === "tires" ||
-            catLower === "transmission" ||
-            catLower === "filter" ||
-            catLower === "general";
+            itemCat.includes("serv") ||
+            itemCat === "oil" ||
+            itemCat === "brake" ||
+            itemCat === "tires" ||
+            itemCat === "transmission" ||
+            itemCat === "filter" ||
+            itemCat === "general";
           if (!isServ) return false;
         } else if (activeFilter === "Top Up Etoll") {
-          if (itemCat !== "Top Up Etoll") return false;
+          if (!itemCat.includes("etoll") && !itemCat.includes("tol")) return false;
+        } else if (activeFilter === "Pajak & STNK") {
+          if (!itemCat.includes("pajak") && !itemCat.includes("stnk") && !itemCat.includes("kir"))
+            return false;
+        } else if (activeFilter === "Parkir & Cuci") {
+          if (!itemCat.includes("parkir") && !itemCat.includes("cuci")) return false;
         } else if (activeFilter === "Lainnya") {
-          if (itemCat === "Service" || itemCat === "Top Up Etoll") return false;
+          if (
+            itemCat.includes("serv") ||
+            itemCat.includes("etoll") ||
+            itemCat.includes("tol") ||
+            itemCat.includes("pajak") ||
+            itemCat.includes("stnk") ||
+            itemCat.includes("parkir") ||
+            itemCat.includes("cuci")
+          ) {
+            return false;
+          }
         }
       }
 
       // Search filter by title, category, notes, workshop, or date
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchTitle = item.title.toLowerCase().includes(q);
-        const matchCategory = (item.category || "").toLowerCase().includes(q);
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = (item.title || "").toLowerCase().includes(q);
+        const matchCategory = itemCat.includes(q);
         const matchNotes = (item.notes || "").toLowerCase().includes(q);
         const matchWorkshop = (item.workshop || "").toLowerCase().includes(q);
-        const matchDate = item.date.includes(q);
+        const matchDate = (item.date || "").includes(q);
         return matchTitle || matchCategory || matchNotes || matchWorkshop || matchDate;
       }
 
@@ -134,85 +138,188 @@ export const BiayaPage: React.FC<Props> = ({
     });
   }, [vehicleExpenses, activeFilter, searchQuery]);
 
+  // Sort descending by date (newest first)
+  const sortedExpenses = useMemo(() => {
+    return [...filteredList].sort((a, b) => {
+      const dateA = a.date || "";
+      const dateB = b.date || "";
+      return dateB.localeCompare(dateA);
+    });
+  }, [filteredList]);
+
+  // Group by Month (e.g. "2026-09" -> September 2026)
+  const monthGroups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; items: ServiceHistoryEntry[] }>();
+
+    sortedExpenses.forEach((item) => {
+      const rawDate = item.date || "";
+      let monthKey = "Lainnya";
+      let monthLabel = "Catatan Lainnya";
+
+      if (rawDate && rawDate.length >= 7) {
+        monthKey = rawDate.slice(0, 7);
+        const [yearStr, monthStr] = monthKey.split("-");
+        const y = parseInt(yearStr, 10);
+        const m = parseInt(monthStr, 10);
+        if (!isNaN(y) && !isNaN(m) && m >= 1 && m <= 12) {
+          const d = new Date(y, m - 1, 1);
+          monthLabel = d.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          });
+        } else {
+          monthLabel = monthKey;
+        }
+      }
+
+      if (!map.has(monthKey)) {
+        map.set(monthKey, { key: monthKey, label: monthLabel, items: [] });
+      }
+      map.get(monthKey)!.items.push(item);
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.key.localeCompare(a.key));
+  }, [sortedExpenses]);
+
+  // Accordion toggle for month groups
+  const toggleMonth = (monthKey: string) => {
+    setCollapsedMonths((prev) => ({
+      ...prev,
+      [monthKey]: !prev[monthKey],
+    }));
+  };
+
+  // Open modal for new expense
   const handleOpenAddModal = () => {
+    setEditingItem(null);
     setDate(new Date().toISOString().slice(0, 10));
     setCategory("Service");
     setTitle("");
     setCost("");
-    setOdometer(
-      vehicle?.currentOdometer ? String(vehicle.currentOdometer) : ""
-    );
+    setOdometer(vehicle?.currentOdometer ? String(vehicle.currentOdometer) : "");
     setWorkshop("");
     setNotes("");
     setIsModalOpen(true);
   };
 
+  // Open modal for editing an existing expense
+  const handleOpenEditModal = (item: ServiceHistoryEntry) => {
+    setEditingItem(item);
+    setDate(item.date || new Date().toISOString().slice(0, 10));
+    setCategory(item.category || "Service");
+    setTitle(item.title || "");
+    setCost(item.cost ? String(Math.round(item.cost)) : "");
+    setOdometer(item.odometer ? String(item.odometer) : "");
+    setWorkshop(item.workshop || "");
+    setNotes(item.notes || "");
+    setIsModalOpen(true);
+  };
+
+  // Submit handler (supports both add and edit)
   const handleSaveExpense = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert("Harap masukkan nama / keterangan biaya.");
       return;
     }
     const parsedCost = parseFloat(cost.replace(/[^0-9]/g, ""));
     if (!parsedCost || parsedCost <= 0) {
-      alert("Harap masukkan nominal biaya yang valid.");
       return;
     }
 
-    if (!vehicle) {
-      alert("Pilih atau daftarkan kendaraan terlebih dahulu.");
-      return;
-    }
+    const currentVehId = vehicle?.id || "default";
 
-    onAddExpense({
-      vehicleId: vehicle.id,
-      title: title.trim(),
-      category: category,
-      date: date || new Date().toISOString().slice(0, 10),
-      cost: parsedCost,
-      odometer: odometer ? Number(odometer) : undefined,
-      workshop: workshop.trim() || undefined,
-      notes: notes.trim() || undefined,
-    });
+    if (editingItem) {
+      // Update existing item
+      const updatedEntry: ServiceHistoryEntry = {
+        ...editingItem,
+        vehicleId: currentVehId,
+        title: title.trim(),
+        category: category,
+        date: date || new Date().toISOString().slice(0, 10),
+        cost: parsedCost,
+        odometer: odometer ? Number(odometer) : undefined,
+        workshop: workshop.trim() || undefined,
+        notes: notes.trim() || undefined,
+      };
+      if (onSaveExpense) {
+        onSaveExpense(updatedEntry);
+      }
+    } else {
+      // Create new item
+      const newEntry: ServiceHistoryEntry = {
+        id: `exp-${Date.now()}`,
+        vehicleId: currentVehId,
+        title: title.trim(),
+        category: category,
+        date: date || new Date().toISOString().slice(0, 10),
+        cost: parsedCost,
+        odometer: odometer ? Number(odometer) : undefined,
+        workshop: workshop.trim() || undefined,
+        notes: notes.trim() || undefined,
+        createdAt: new Date().toISOString(),
+      };
+      if (onSaveExpense) {
+        onSaveExpense(newEntry);
+      } else if (onAddExpense) {
+        onAddExpense(newEntry);
+      }
+    }
 
     setIsModalOpen(false);
+    setEditingItem(null);
   };
 
-  const getCategoryBadge = (cat: string) => {
-    const c = cat.toLowerCase();
+  // Visual helper: category style badge & icon
+  const getCategoryMeta = (catStr?: string) => {
+    const catLower = (catStr || "").toLowerCase();
     if (
-      c === "service" ||
-      c === "oil" ||
-      c === "brake" ||
-      c === "tires" ||
-      c === "transmission" ||
-      c === "filter" ||
-      c === "general"
+      catLower.includes("serv") ||
+      catLower === "oil" ||
+      catLower === "brake" ||
+      catLower === "tires" ||
+      catLower === "filter"
     ) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
-          <Wrench className="w-2.5 h-2.5" />
-          Service
-        </span>
-      );
-    } else if (c === "top up etoll" || c === "etoll") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
-          <CreditCard className="w-2.5 h-2.5" />
-          Top Up Etoll
-        </span>
-      );
+      return {
+        label: "Servis",
+        icon: Wrench,
+        badgeBg: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400 border-blue-200 dark:border-blue-500/30",
+        avatarBg: "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400",
+      };
     }
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20">
-        <Layers className="w-2.5 h-2.5" />
-        Lainnya
-      </span>
-    );
+    if (catLower.includes("etoll") || catLower.includes("tol")) {
+      return {
+        label: "Top Up E-Toll",
+        icon: CreditCard,
+        badgeBg: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 border-amber-200 dark:border-amber-500/30",
+        avatarBg: "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400",
+      };
+    }
+    if (catLower.includes("pajak") || catLower.includes("stnk") || catLower.includes("kir")) {
+      return {
+        label: "Pajak & STNK",
+        icon: FileText,
+        badgeBg: "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/30",
+        avatarBg: "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400",
+      };
+    }
+    if (catLower.includes("parkir") || catLower.includes("cuci")) {
+      return {
+        label: "Parkir & Cuci",
+        icon: Car,
+        badgeBg: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30",
+        avatarBg: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+      };
+    }
+    return {
+      label: catStr || "Lainnya",
+      icon: Layers,
+      badgeBg: "bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-400 border-purple-200 dark:border-purple-500/30",
+      avatarBg: "bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400",
+    };
   };
 
-  // If user has not registered vehicle yet, show registration prompt
-  if (!vehicle) {
+  // If user has not registered vehicle yet AND no expenses, prompt registration
+  if (!vehicle && serviceHistory.length === 0) {
     return (
       <div className="space-y-4 pb-28">
         <div className="bg-white dark:bg-[#151c2c] p-7 rounded-2xl border-2 border-dashed border-blue-300 dark:border-blue-700/60 text-center space-y-4">
@@ -224,237 +331,329 @@ export const BiayaPage: React.FC<Props> = ({
               Daftarkan Kendaraan Anda
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-              Anda belum mendaftarkan kendaraan. Daftarkan mobil atau motor Anda sekarang untuk mulai mencatat biaya servis, tol, dan pengeluaran kendaraan.
+              Daftarkan mobil atau motor Anda sekarang untuk mulai mencatat biaya servis berkala, isi saldo e-toll, pajak, dan pengeluaran operasional.
             </p>
           </div>
-          <button
-            onClick={onOpenRegisterVehicle}
-            className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Daftarkan Kendaraan Anda</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+            <button
+              onClick={onOpenRegisterVehicle}
+              className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition active:scale-98 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Daftarkan Kendaraan Anda</span>
+            </button>
+            <button
+              onClick={handleOpenAddModal}
+              className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition cursor-pointer"
+            >
+              <Wallet className="w-4 h-4" />
+              <span>Catat Biaya Langsung</span>
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 pb-24 text-slate-800 dark:text-slate-100 transition-colors">
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#182132] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <Wallet className="w-4 h-4" />
+    <div className="space-y-4 pb-28 text-slate-800 dark:text-slate-100 transition-colors">
+      {/* Dedicated Expense Page Header */}
+      <div className="bg-white dark:bg-[#151c2a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <Wallet className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold text-slate-900 dark:text-white">
+                Buku Biaya Kendaraan
+              </h1>
+              {vehicle?.name && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                  {vehicle.name}
+                </span>
+              )}
             </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                Riwayat Biaya Kendaraan
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Catatan pengeluaran Service, Top Up Etoll, dan biaya operasional lainnya
-              </p>
-            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Catatan transaksi servis, e-toll, pajak, dan pengeluaran operasional
+            </p>
           </div>
         </div>
 
         <button
+          type="button"
           onClick={handleOpenAddModal}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md transition active:scale-95"
+          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-xs transition active:scale-95 cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Tambah Biaya Baru
+          <span>+ Catat Biaya Baru</span>
         </button>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        {/* Total Semua Biaya */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
-          <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-            Total Biaya
-          </div>
-          <div className="text-sm sm:text-base md:text-lg font-bold text-slate-900 dark:text-white tracking-tight mt-1 truncate" title={formatRupiah(totals.totalAll)}>
-            {formatRupiah(totals.totalAll)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-            {vehicleExpenses.length} transaksi tercatat
-          </div>
-        </div>
-
-        {/* Kategori: Service */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
-          <div className="text-[11px] font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1 truncate">
-            <Wrench className="w-3 h-3 shrink-0" />
-            <span className="truncate">Service</span>
-          </div>
-          <div className="text-sm sm:text-base md:text-lg font-bold text-blue-600 dark:text-blue-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalService)}>
-            {formatRupiah(totals.totalService)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-            Perawatan &amp; perbaikan
-          </div>
-        </div>
-
-        {/* Kategori: Top Up Etoll */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
-          <div className="text-[11px] font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1 truncate">
-            <CreditCard className="w-3 h-3 shrink-0" />
-            <span className="truncate">Top Up Etoll</span>
-          </div>
-          <div className="text-sm sm:text-base md:text-lg font-bold text-amber-600 dark:text-amber-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalEtoll)}>
-            {formatRupiah(totals.totalEtoll)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-            Tarif tol &amp; uang elektronik
-          </div>
-        </div>
-
-        {/* Kategori: Lainnya */}
-        <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm min-w-0 overflow-hidden">
-          <div className="text-[11px] font-medium text-purple-600 dark:text-purple-400 flex items-center gap-1 truncate">
-            <Layers className="w-3 h-3 shrink-0" />
-            <span className="truncate">Lainnya</span>
-          </div>
-          <div className="text-sm sm:text-base md:text-lg font-bold text-purple-600 dark:text-purple-400 tracking-tight mt-1 truncate" title={formatRupiah(totals.totalLainnya)}>
-            {formatRupiah(totals.totalLainnya)}
-          </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-            Parkir, cuci, aksesoris, dll
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs & Search Bar */}
-      <div className="bg-white dark:bg-[#182132] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#101622] rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-            {["Semua", "Service", "Top Up Etoll", "Lainnya"].map((tab) => (
+      {/* Filter Chips & Search Bar */}
+      <div className="bg-white dark:bg-[#151c2a] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-2.5">
+        {/* Category Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+          {[
+            { id: "Semua", label: "Semua", icon: null },
+            { id: "Service", label: "Servis & Perawatan", icon: Wrench },
+            { id: "Top Up Etoll", label: "Top Up E-Toll", icon: CreditCard },
+            { id: "Pajak & STNK", label: "Pajak & STNK", icon: FileText },
+            { id: "Parkir & Cuci", label: "Parkir & Cuci", icon: Car },
+            { id: "Lainnya", label: "Lainnya", icon: Layers },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeFilter === tab.id;
+            return (
               <button
-                key={tab}
-                onClick={() => setActiveFilter(tab)}
-                className={`px-3 py-1 rounded-lg font-medium transition ${
-                  activeFilter === tab
-                    ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white font-semibold shadow-sm"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveFilter(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-medium text-xs whitespace-nowrap transition cursor-pointer shrink-0 ${
+                  isActive
+                    ? "bg-blue-600 text-white font-semibold shadow-xs"
+                    : "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
-                {tab}
+                {Icon && <Icon className="w-3.5 h-3.5 shrink-0" />}
+                <span>{tab.label}</span>
               </button>
-            ))}
-          </div>
-
-          <span className="text-[11px] text-slate-500 dark:text-slate-400">
-            Menampilkan <b>{filteredList.length}</b> catatan
-          </span>
+            );
+          })}
         </div>
 
-        {/* Search Input */}
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        {/* Search Input Bar */}
+        <div className="relative flex items-center">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari berdasarkan judul biaya atau kategori (Service, Top Up Etoll, Lainnya)..."
-            className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+            placeholder="Cari transaksi (contoh: Oli, e-Money, Pajak, Auto2000, 2026-09)..."
+            className="w-full bg-slate-50 dark:bg-[#10141e] border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition"
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-white transition cursor-pointer"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Counter Info */}
+        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1 pt-0.5">
+          <span>
+            Menampilkan <b>{filteredList.length}</b> transaksi biaya
+            {activeFilter !== "Semua" ? ` (${activeFilter})` : ""}
+          </span>
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="text-rose-500 hover:underline font-medium cursor-pointer"
+            >
+              Reset Pencarian
             </button>
           )}
         </div>
       </div>
 
-      {/* List of Manual Expense Records */}
-      {filteredList.length === 0 ? (
-        <div className="bg-white dark:bg-[#182132] p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-slate-400 flex items-center justify-center mx-auto">
-            <FileText className="w-6 h-6" />
+      {/* Empty State */}
+      {filteredList.length === 0 && (
+        <div className="bg-white dark:bg-[#141a26] p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+            {searchQuery ? <Search className="w-6 h-6" /> : <Wallet className="w-6 h-6" />}
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Belum Ada Riwayat Biaya
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+              {searchQuery ? "Transaksi Tidak Ditemukan" : "Belum Ada Catatan Biaya"}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mt-1">
-              Catat riwayat biaya seperti Service bengkel, Top Up E-Toll tol, atau pengeluaran operasional lainnya.
+              {searchQuery
+                ? `Tidak ada transaksi yang cocok dengan kata kunci "${searchQuery}". Coba kata kunci lain.`
+                : "Catat pengeluaran seperti servis berkala di bengkel, isi saldo kartu e-toll, pajak STNK, atau cuci kendaraan."}
             </p>
           </div>
           <button
-            onClick={handleOpenAddModal}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition"
+            type="button"
+            onClick={searchQuery ? () => setSearchQuery("") : handleOpenAddModal}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition cursor-pointer shadow-xs"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Catat Biaya Pertama
+            {searchQuery ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+            <span>{searchQuery ? "Hapus Filter Pencarian" : "+ Catat Biaya Pertama"}</span>
           </button>
         </div>
-      ) : (
-        <div className="space-y-2.5">
-          {filteredList.map((item) => (
-            <div
-              key={item.id}
-              className="bg-white dark:bg-[#182132] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-start justify-between gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition"
-            >
-              <div className="space-y-1.5 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {getCategoryBadge(item.category)}
-                  <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {item.date}
-                  </span>
-                  {item.odometer && (
-                    <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
-                      <Gauge className="w-3 h-3 text-slate-400" />
-                      {item.odometer.toLocaleString("id-ID")} km
-                    </span>
-                  )}
-                </div>
-
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  {item.title}
-                </h4>
-
-                {(item.workshop || item.notes) && (
-                  <div className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
-                    {item.workshop && (
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                        <MapPin className="w-3 h-3 shrink-0" />
-                        <span>{item.workshop}</span>
-                      </div>
-                    )}
-                    {item.notes && (
-                      <p className="text-[11px] italic text-slate-500 dark:text-slate-400">
-                        "{item.notes}"
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Price & Delete Action */}
-              <div className="text-right flex flex-col items-end justify-between self-stretch shrink-0">
-                <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                  {formatRupiah(item.cost || 0)}
-                </div>
-
-                <button
-                  onClick={() => setDeletingId(item.id)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition mt-2"
-                  title="Hapus riwayat biaya ini"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
       )}
+
+      {/* Grouped Month Lists with Accordion Feature */}
+      {monthGroups.map(({ key: monthKey, label: monthLabel, items: monthItems }) => {
+        const monthTotal = monthItems.reduce((acc, h) => acc + (Number(h.cost) || 0), 0);
+        const isCollapsed = Boolean(collapsedMonths[monthKey]);
+
+        return (
+          <div key={monthKey} className="space-y-2.5">
+            {/* Interactive Month Accordion Header Card */}
+            <button
+              type="button"
+              onClick={() => toggleMonth(monthKey)}
+              aria-expanded={!isCollapsed}
+              className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 group select-none shadow-xs cursor-pointer ${
+                isCollapsed
+                  ? "bg-white dark:bg-[#151c2a] hover:bg-slate-50 dark:hover:bg-[#1a2233] border-slate-200 dark:border-slate-800"
+                  : "bg-gradient-to-r from-purple-50/70 via-white to-slate-50/50 dark:from-[#1b192e] dark:via-[#151c2a] dark:to-[#121722] border-purple-200/80 dark:border-purple-800/60"
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                    isCollapsed
+                      ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-purple-600"
+                      : "bg-purple-600 text-white shadow-xs"
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white capitalize truncate">
+                      {monthLabel}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400 shrink-0">
+                      {monthItems.length} transaksi
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block truncate">
+                    Total pengeluaran bulan ini
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="font-mono font-bold text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">
+                  {formatRupiah(monthTotal)}
+                </span>
+                <div
+                  className={`p-1 rounded-lg text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-transform duration-200 ${
+                    isCollapsed ? "-rotate-90" : "rotate-0"
+                  }`}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </div>
+              </div>
+            </button>
+
+            {/* List of Expense Transaction Cards for this month */}
+            {!isCollapsed && (
+              <div className="space-y-2.5 pt-0.5 animate-in fade-in duration-200">
+                {monthItems.map((item) => {
+                  const meta = getCategoryMeta(item.category);
+                  const Icon = meta.icon;
+                  const formattedDate = formatDisplayDate(item.date);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white dark:bg-[#192131] hover:bg-slate-50 dark:hover:bg-[#1d2638] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-xs transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    >
+                      {/* Left: Category Icon & Details */}
+                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                        <div
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.avatarBg}`}
+                        >
+                          <Icon className="w-5 h-5" />
+                        </div>
+
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${meta.badgeBg}`}
+                            >
+                              <Icon className="w-2.5 h-2.5" />
+                              <span>{meta.label}</span>
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              <span>{formattedDate}</span>
+                            </span>
+                            {item.odometer && (
+                              <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 px-1.5 py-0.5 rounded">
+                                <Gauge className="w-3 h-3 text-slate-400" />
+                                <span>{item.odometer.toLocaleString("id-ID")} km</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                            {item.title}
+                          </h3>
+
+                          {(item.workshop || item.notes) && (
+                            <div className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5 pt-0.5">
+                              {item.workshop && (
+                                <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  <MapPin className="w-3 h-3 text-blue-500 shrink-0" />
+                                  <span className="truncate">{item.workshop}</span>
+                                </div>
+                              )}
+                              {item.notes && (
+                                <p className="text-[11px] italic text-slate-500 dark:text-slate-400 line-clamp-2">
+                                  "{item.notes}"
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: Nominal & Action Buttons */}
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-100 dark:border-slate-800 shrink-0">
+                        <div className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">
+                          {formatRupiah(item.cost || 0)}
+                        </div>
+
+                        {/* Edit & Delete Action Buttons */}
+                        <div className="flex items-center gap-1 mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(item)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition cursor-pointer"
+                            title="Edit data biaya ini"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingId(item.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition cursor-pointer"
+                            title="Hapus riwayat biaya ini"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Floating Action Button (FAB) (+) */}
+      <div className="fixed bottom-24 right-4 sm:right-6 z-30">
+        <button
+          type="button"
+          onClick={handleOpenAddModal}
+          className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-2xl bg-blue-600 hover:bg-blue-500 text-white transition active:scale-95 shadow-blue-600/30 cursor-pointer"
+          title="Catat Biaya Baru"
+        >
+          <Plus className="w-6 h-6 stroke-[2.5]" />
+        </button>
+      </div>
 
       {/* Confirmation Modal for Deleting Record */}
       {deletingId && (
@@ -467,14 +666,13 @@ export const BiayaPage: React.FC<Props> = ({
               </h3>
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Apakah Anda yakin ingin menghapus catatan biaya ini? Tindakan ini
-              tidak dapat dibatalkan.
+              Apakah Anda yakin ingin menghapus catatan biaya ini? Data ini akan dihapus permanen dari perangkat.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setDeletingId(null)}
-                className="px-3.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                className="px-3.5 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
               >
                 Batal
               </button>
@@ -484,16 +682,16 @@ export const BiayaPage: React.FC<Props> = ({
                   onDeleteExpense(deletingId);
                   setDeletingId(null);
                 }}
-                className="px-4 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-sm transition active:scale-95"
+                className="px-4 py-1.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
               >
-                Hapus
+                Ya, Hapus
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Add Manual Expense */}
+      {/* Modal Add / Edit Expense */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
           <div className="relative w-full max-w-md bg-white dark:bg-[#151c2b] text-slate-900 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col transition-colors">
@@ -505,14 +703,20 @@ export const BiayaPage: React.FC<Props> = ({
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                    Catat Biaya Kendaraan
+                    {editingItem ? "Edit Data Biaya" : "Catat Biaya Kendaraan"}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{vehicle?.name || "Kendaraan"}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {vehicle?.name || "Kendaraan"}
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingItem(null);
+                }}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -534,26 +738,26 @@ export const BiayaPage: React.FC<Props> = ({
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
                     required
-                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
                   />
                 </div>
 
-                {/* Kategori: Dropdown strictly: Service, Top Up Etoll, Lainnya */}
+                {/* Kategori Biaya */}
                 <div>
                   <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
                     Kategori *
                   </label>
                   <select
                     value={category}
-                    onChange={(e) =>
-                      setCategory(e.target.value as ExpenseCategory)
-                    }
+                    onChange={(e) => setCategory(e.target.value)}
                     required
-                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
                   >
-                    <option value="Service">Service</option>
-                    <option value="Top Up Etoll">Top Up Etoll</option>
-                    <option value="Lainnya">Lainnya</option>
+                    <option value="Service">Servis &amp; Bengkel</option>
+                    <option value="Top Up Etoll">Top Up E-Toll</option>
+                    <option value="Pajak & STNK">Pajak &amp; STNK</option>
+                    <option value="Parkir & Cuci">Parkir &amp; Cuci</option>
+                    <option value="Lainnya">Biaya Lainnya</option>
                   </select>
                 </div>
               </div>
@@ -561,7 +765,7 @@ export const BiayaPage: React.FC<Props> = ({
               {/* Keterangan / Judul Biaya */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Keterangan / Nama Biaya *
+                  Nama / Keterangan Biaya *
                 </label>
                 <input
                   type="text"
@@ -569,13 +773,17 @@ export const BiayaPage: React.FC<Props> = ({
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={
                     category === "Service"
-                      ? "Contoh: Ganti Oli Mesin & Filter"
+                      ? "Contoh: Ganti Oli Mesin & Filter Oli"
                       : category === "Top Up Etoll"
-                      ? "Contoh: Top Up Mandiri e-Money / Flazz"
-                      : "Contoh: Cuci Mobil & Jamur Kaca"
+                      ? "Contoh: Top Up Saldo Mandiri e-Money / Flazz"
+                      : category === "Pajak & STNK"
+                      ? "Contoh: Pajak Kendaraan Bermotor Tahunan (PKB)"
+                      : category === "Parkir & Cuci"
+                      ? "Contoh: Cuci Mobil & Poles Kaca"
+                      : "Contoh: Beli Pengharum Kabin & Aksesoris"
                   }
                   required
-                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
                 />
               </div>
 
@@ -589,12 +797,10 @@ export const BiayaPage: React.FC<Props> = ({
                     type="text"
                     inputMode="numeric"
                     value={cost}
-                    onChange={(e) =>
-                      setCost(e.target.value.replace(/[^0-9]/g, ""))
-                    }
+                    onChange={(e) => setCost(e.target.value.replace(/[^0-9]/g, ""))}
                     placeholder="Contoh: 350000"
                     required
-                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] font-mono"
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] font-mono"
                   />
                 </div>
 
@@ -608,7 +814,7 @@ export const BiayaPage: React.FC<Props> = ({
                     value={odometer}
                     onChange={(e) => setOdometer(e.target.value)}
                     placeholder={String(vehicle?.currentOdometer || 0)}
-                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] font-mono"
+                    className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622] font-mono"
                   />
                 </div>
               </div>
@@ -616,14 +822,14 @@ export const BiayaPage: React.FC<Props> = ({
               {/* Tempat / Bengkel / Merchant */}
               <div>
                 <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Tempat / Bengkel / Merchant
+                  Bengkel / Tempat / Merchant
                 </label>
                 <input
                   type="text"
                   value={workshop}
                   onChange={(e) => setWorkshop(e.target.value)}
-                  placeholder="Contoh: Auto2000 BSD, Indomaret, dsb"
-                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                  placeholder="Contoh: Auto2000 Pasteur, Indomaret, Samsat Outlet"
+                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
                 />
               </div>
 
@@ -637,7 +843,7 @@ export const BiayaPage: React.FC<Props> = ({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Catatan pengerjaan atau detail transaksi..."
-                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
+                  className="w-full bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-[#101622]"
                 />
               </div>
 
@@ -645,16 +851,19 @@ export const BiayaPage: React.FC<Props> = ({
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setEditingItem(null);
+                  }}
+                  className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-lg shadow-sm transition active:scale-95"
+                  className="px-5 py-2 text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-xs transition active:scale-95 cursor-pointer"
                 >
-                  Simpan Biaya
+                  {editingItem ? "Perbarui Biaya" : "Simpan Biaya"}
                 </button>
               </div>
             </form>

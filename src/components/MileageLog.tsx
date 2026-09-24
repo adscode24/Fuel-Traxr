@@ -13,6 +13,9 @@ import {
   Car,
   Fuel,
   Info,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit } from "../types";
 import { StationLogo } from "./StationLogo";
@@ -42,6 +45,23 @@ export const MileageLog: React.FC<Props> = ({
   const [previewReceipt, setPreviewReceipt] = useState<string | null>(null);
   const [recordToDelete, setRecordToDelete] = useState<FuelRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+
+  const toggleMonth = (monthKey: string) => {
+    setCollapsedMonths((prev) => ({
+      ...prev,
+      [monthKey]: !prev[monthKey],
+    }));
+  };
+
+  const handleExpandAllMonths = () => setCollapsedMonths({});
+  const handleCollapseAllMonths = () => {
+    const allCollapsed: Record<string, boolean> = {};
+    monthGroups.forEach((g) => {
+      allCollapsed[g.key] = true;
+    });
+    setCollapsedMonths(allCollapsed);
+  };
 
   // Support both prop names seamlessly
   const handleOpenAdd = onOpenManualAdd || onOpenManualEntry || (() => {});
@@ -313,7 +333,32 @@ export const MileageLog: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Grouped Month Lists */}
+      {/* Grouped Month Lists with Accordion Feature */}
+      {monthGroups.length > 1 && (
+        <div className="flex items-center justify-between px-1 pt-1 pb-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <span className="font-medium">
+            Riwayat per Bulan ({monthGroups.length} bulan)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExpandAllMonths}
+              className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+            >
+              Buka Semua
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={handleCollapseAllMonths}
+              className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:underline cursor-pointer"
+            >
+              Tutup Semua
+            </button>
+          </div>
+        </div>
+      )}
+
       {monthGroups.map(({ key: monthKey, label: monthLabel, records: monthRecords }) => {
         // Calculate Month Summary
         const monthCost = monthRecords.reduce((acc, r) => acc + (Number(r.totalCost) || 0), 0);
@@ -324,210 +369,249 @@ export const MileageLog: React.FC<Props> = ({
         );
         const monthAvgKmL =
           monthLiters > 0 && monthDist > 0 ? (monthDist / monthLiters).toFixed(2) : "-";
+        const isCollapsed = Boolean(collapsedMonths[monthKey]);
 
         return (
-          <div key={monthKey} className="space-y-3">
-            {/* Month Header Banner */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 px-1 pt-2">
-              <h2 className="text-sm font-bold tracking-wide text-slate-800 dark:text-slate-200 capitalize">
-                {monthLabel}
-              </h2>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                <span className="bg-slate-100 dark:bg-[#1c2334] px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700/60 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+          <div key={monthKey} className="space-y-2.5">
+            {/* Interactive Accordion Header Card */}
+            <button
+              type="button"
+              onClick={() => toggleMonth(monthKey)}
+              aria-expanded={!isCollapsed}
+              className={`w-full text-left p-3.5 sm:p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 group select-none shadow-xs cursor-pointer ${
+                isCollapsed
+                  ? "bg-white dark:bg-[#151c2a] hover:bg-slate-50 dark:hover:bg-[#1a2233] border-slate-200 dark:border-slate-800"
+                  : "bg-gradient-to-r from-blue-50/70 via-white to-slate-50/50 dark:from-[#162033] dark:via-[#151c2a] dark:to-[#131926] border-blue-200/80 dark:border-blue-700/60"
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                    isCollapsed
+                      ? "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:text-blue-600"
+                      : "bg-blue-600 text-white shadow-xs"
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-bold tracking-tight text-slate-900 dark:text-white capitalize truncate">
+                      {monthLabel}
+                    </h2>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 shrink-0">
+                      {monthRecords.length}x isi
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    <span>{monthLiters.toFixed(1)} L</span>
+                    <span>•</span>
+                    <span className="text-blue-600 dark:text-blue-400 font-medium">
+                      Rata-rata {monthAvgKmL} km/l
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="font-mono font-bold text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">
                   {formatRupiah(monthCost, false)}
                 </span>
-                <span>•</span>
-                <span>{monthLiters.toFixed(1)} L</span>
-                <span>•</span>
-                <span className="text-blue-600 dark:text-blue-400 font-medium">
-                  Rata-rata {monthAvgKmL} km/l
-                </span>
+                <div
+                  className={`p-1 rounded-lg text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-transform duration-200 ${
+                    isCollapsed ? "-rotate-90" : "rotate-0"
+                  }`}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </div>
               </div>
-            </div>
+            </button>
 
-            {/* List of Cards for this month */}
-            <div className="space-y-3">
-              {monthRecords.map((record) => {
-                const isMenuOpen = activeMenuId === record.id;
-                const formattedDate = formatDisplayDate(record.date);
+            {/* List of Cards for this month (Accordion Body) */}
+            {!isCollapsed && (
+              <div className="space-y-3 pt-0.5 animate-in fade-in duration-200">
+                {monthRecords.map((record) => {
+                  const isMenuOpen = activeMenuId === record.id;
+                  const formattedDate = formatDisplayDate(record.date);
 
-                return (
-                  <div
-                    key={record.id}
-                    className="relative bg-white dark:bg-[#192131] hover:bg-slate-50 dark:hover:bg-[#1d2638] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm transition overflow-hidden p-4 space-y-3"
-                  >
-                    {/* Top Row: Brand Logo, Date, Total Cost & Odometer */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3.5">
-                        {/* Circular Fuel Brand Logo matching the SPBU station name */}
-                        <StationLogo
-                          stationName={record.stationName || "SPBU"}
-                          fuelCategory={vehicle?.fuelCategory}
-                          className="w-11 h-11"
-                        />
+                  return (
+                    <div
+                      key={record.id}
+                      className="relative bg-white dark:bg-[#192131] hover:bg-slate-50 dark:hover:bg-[#1d2638] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm transition overflow-hidden p-4 space-y-3"
+                    >
+                      {/* Top Row: Brand Logo, Date, Total Cost & Odometer */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start space-x-3.5">
+                          {/* Circular Fuel Brand Logo matching the SPBU station name */}
+                          <StationLogo
+                            stationName={record.stationName || "SPBU"}
+                            fuelCategory={vehicle?.fuelCategory}
+                            className="w-11 h-11"
+                          />
 
-                        <div>
-                          {/* Date & Time */}
-                          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                            {formattedDate} {record.time ? `• ${record.time}` : ""}
-                          </div>
-                          {/* Big Total Rupiah */}
-                          <div className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
-                            {formatRupiah(record.totalCost)}
+                          <div>
+                            {/* Date & Time */}
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                              {formattedDate} {record.time ? `• ${record.time}` : ""}
+                            </div>
+                            {/* Big Total Rupiah */}
+                            <div className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                              {formatRupiah(record.totalCost)}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Right: Odometer and Delta Distance */}
-                      <div className="text-right flex flex-col items-end">
-                        <div className="flex items-center gap-1">
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100 font-mono">
-                            {(record.odometer || 0).toLocaleString("id-ID")} km
-                          </span>
-                          {/* Menu button */}
-                          <div className="relative ml-1">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setActiveMenuId(isMenuOpen ? null : record.id)
-                              }
-                              className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
+                        {/* Right: Odometer and Delta Distance */}
+                        <div className="text-right flex flex-col items-end">
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-100 font-mono">
+                              {(record.odometer || 0).toLocaleString("id-ID")} km
+                            </span>
+                            {/* Menu button */}
+                            <div className="relative ml-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveMenuId(isMenuOpen ? null : record.id)
+                                }
+                                className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/60 transition"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
 
-                            {/* Dropdown Menu */}
-                            {isMenuOpen && (
-                              <div className="absolute right-0 top-6 w-36 bg-white dark:bg-[#121722] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 py-1 text-xs">
-                                {record.receiptImage && (
+                              {/* Dropdown Menu */}
+                              {isMenuOpen && (
+                                <div className="absolute right-0 top-6 w-36 bg-white dark:bg-[#121722] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                  {record.receiptImage && (
+                                    <button
+                                      onClick={() => {
+                                        setPreviewReceipt(record.receiptImage || null);
+                                        setActiveMenuId(null);
+                                      }}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white text-left"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-blue-500" />
+                                      Lihat Struk
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => {
-                                      setPreviewReceipt(record.receiptImage || null);
+                                      onEditRecord(record);
                                       setActiveMenuId(null);
                                     }}
                                     className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white text-left"
                                   >
-                                    <Eye className="w-3.5 h-3.5 text-blue-500" />
-                                    Lihat Struk
+                                    <Edit2 className="w-3.5 h-3.5 text-amber-500" />
+                                    Edit Data
                                   </button>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    onEditRecord(record);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white text-left"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5 text-amber-500" />
-                                  Edit Data
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setRecordToDelete(record);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 text-left"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  Hapus
-                                </button>
-                              </div>
-                            )}
+                                  <button
+                                    onClick={() => {
+                                      setRecordToDelete(record);
+                                      setActiveMenuId(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 text-left"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Hapus
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Delta KM */}
-                        {record.distanceTraveled !== undefined && record.distanceTraveled > 0 ? (
-                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
-                            +{record.distanceTraveled} km
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400">
-                            Pengisian awal
+                          {/* Delta KM */}
+                          {record.distanceTraveled !== undefined && record.distanceTraveled > 0 ? (
+                            <span className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                              +{record.distanceTraveled} km
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              Pengisian awal
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Middle Row: Liter & Unit Price with Droplet Icon */}
+                      <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 pl-1">
+                        <Droplet className="w-4 h-4 text-blue-500 dark:text-blue-400 fill-blue-500/20 shrink-0" />
+                        <span className="font-mono font-medium">
+                          {formatDecimals(record.liters)} L
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
+                          {formatRupiah(record.pricePerLiter)}/L
+                        </span>
+                        {record.fuelType && (
+                          <span className="text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
+                            {record.fuelType}
+                            {record.octaneOrGrade ? ` (${record.octaneOrGrade})` : ""}
                           </span>
                         )}
                       </div>
-                    </div>
 
-                    {/* Middle Row: Liter & Unit Price with Droplet Icon */}
-                    <div className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 pl-1">
-                      <Droplet className="w-4 h-4 text-blue-500 dark:text-blue-400 fill-blue-500/20 shrink-0" />
-                      <span className="font-mono font-medium">
-                        {formatDecimals(record.liters)} L
-                      </span>
-                      <span className="text-slate-400">→</span>
-                      <span className="font-mono text-slate-700 dark:text-slate-300 font-medium">
-                        {formatRupiah(record.pricePerLiter)}/L
-                      </span>
-                      {record.fuelType && (
-                        <span className="text-slate-600 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
-                          {record.fuelType}
-                          {record.octaneOrGrade ? ` (${record.octaneOrGrade})` : ""}
-                        </span>
+                      {/* Notes if available */}
+                      {record.notes && (
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 pl-1 italic">
+                          "{record.notes}"
+                        </div>
                       )}
-                    </div>
 
-                    {/* Notes if available */}
-                    {record.notes && (
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 pl-1 italic">
-                        "{record.notes}"
+                      {/* Divider */}
+                      <div className="border-t border-slate-100 dark:border-slate-800/80 my-1" />
+
+                      {/* Efficiency & Cost Per KM Row */}
+                      <div className="flex items-center flex-wrap gap-x-6 gap-y-1 text-xs pl-1 text-slate-700 dark:text-slate-300">
+                        {/* Fuel Efficiency (km/l or L/100km) */}
+                        <div className="flex items-center gap-1.5">
+                          <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {fuelUnit === "l/100km" ? "L/100km:" : "km/l:"}
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-white font-mono">
+                            {fuelUnit === "l/100km"
+                              ? record.fuelEfficiencyKmPerL && record.fuelEfficiencyKmPerL > 0
+                                ? (100 / record.fuelEfficiencyKmPerL).toFixed(2).replace(".", ",")
+                                : "-"
+                              : formatDecimals(record.fuelEfficiencyKmPerL)}
+                          </span>
+                        </div>
+
+                        {/* Rp/km */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-4 h-4 rounded-full border border-slate-400 text-slate-600 dark:text-slate-300 text-[10px] flex items-center justify-center font-bold">
+                            $
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-white font-mono">
+                            {record.costPerKm ? `${formatRupiah(record.costPerKm)}/km` : "-"}
+                          </span>
+                        </div>
+
+                        {record.receiptImage && (
+                          <button
+                            onClick={() => setPreviewReceipt(record.receiptImage || null)}
+                            className="ml-auto text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
+                          >
+                            <Eye className="w-3 h-3" />
+                            Foto Struk
+                          </button>
+                        )}
                       </div>
-                    )}
 
-                    {/* Divider */}
-                    <div className="border-t border-slate-100 dark:border-slate-800/80 my-1" />
-
-                    {/* Efficiency & Cost Per KM Row */}
-                    <div className="flex items-center flex-wrap gap-x-6 gap-y-1 text-xs pl-1 text-slate-700 dark:text-slate-300">
-                      {/* Fuel Efficiency (km/l or L/100km) */}
-                      <div className="flex items-center gap-1.5">
-                        <TrendingUp className="w-4 h-4 text-emerald-500 shrink-0" />
-                        <span className="text-slate-500 dark:text-slate-400">
-                          {fuelUnit === "l/100km" ? "L/100km:" : "km/l:"}
-                        </span>
-                        <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                          {fuelUnit === "l/100km"
-                            ? record.fuelEfficiencyKmPerL && record.fuelEfficiencyKmPerL > 0
-                              ? (100 / record.fuelEfficiencyKmPerL).toFixed(2).replace(".", ",")
-                              : "-"
-                            : formatDecimals(record.fuelEfficiencyKmPerL)}
+                      {/* Location & Station Name */}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pl-1 pt-0.5 truncate">
+                        <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        <span className="truncate">
+                          {record.location && record.location !== "-"
+                            ? `${record.location} • ${record.stationName || "SPBU"}`
+                            : record.stationName || "SPBU"}
                         </span>
                       </div>
-
-                      {/* Rp/km */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full border border-slate-400 text-slate-600 dark:text-slate-300 text-[10px] flex items-center justify-center font-bold">
-                          $
-                        </span>
-                        <span className="font-semibold text-slate-900 dark:text-white font-mono">
-                          {record.costPerKm ? `${formatRupiah(record.costPerKm)}/km` : "-"}
-                        </span>
-                      </div>
-
-                      {record.receiptImage && (
-                        <button
-                          onClick={() => setPreviewReceipt(record.receiptImage || null)}
-                          className="ml-auto text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium"
-                        >
-                          <Eye className="w-3 h-3" />
-                          Foto Struk
-                        </button>
-                      )}
                     </div>
-
-                    {/* Location & Station Name */}
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pl-1 pt-0.5 truncate">
-                      <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                      <span className="truncate">
-                        {record.location && record.location !== "-"
-                          ? `${record.location} • ${record.stationName || "SPBU"}`
-                          : record.stationName || "SPBU"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}

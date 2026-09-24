@@ -26,6 +26,9 @@ import {
   Calendar,
   PieChart as PieIcon,
   ReceiptText,
+  Wrench,
+  CreditCard,
+  Layers,
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit, ServiceHistoryEntry } from "../types";
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
@@ -160,6 +163,54 @@ export const StatsDashboard: React.FC<Props> = ({
     0
   );
   const periodOtherCount = periodOtherExpenses.length;
+
+  // Breakdown summary for all vehicle expenses in the selected period (moved from Biaya page)
+  const expenseBreakdown = useMemo(() => {
+    let serviceCost = 0;
+    let serviceCount = 0;
+    let etollCost = 0;
+    let etollCount = 0;
+    let lainnyaCost = 0;
+    let lainnyaCount = 0;
+
+    periodOtherExpenses.forEach((item) => {
+      const amount = Number(item.cost) || 0;
+      const cat = (item.category || "").toLowerCase();
+      if (
+        cat === "service" ||
+        cat === "oil" ||
+        cat === "brake" ||
+        cat === "transmission" ||
+        cat === "filter" ||
+        cat === "tires" ||
+        cat === "general" ||
+        cat.includes("servis") ||
+        cat.includes("bengkel") ||
+        cat.includes("perawatan")
+      ) {
+        serviceCost += amount;
+        serviceCount += 1;
+      } else if (cat === "top up etoll" || cat === "etoll" || cat.includes("tol")) {
+        etollCost += amount;
+        etollCount += 1;
+      } else {
+        lainnyaCost += amount;
+        lainnyaCount += 1;
+      }
+    });
+
+    const totalExpenseOverall = periodFuelCost + periodOtherCost;
+
+    return {
+      serviceCost,
+      serviceCount,
+      etollCost,
+      etollCount,
+      lainnyaCost,
+      lainnyaCount,
+      totalExpenseOverall,
+    };
+  }, [periodOtherExpenses, periodFuelCost, periodOtherCost]);
 
   // Group by months for the Area Trend Chart
   const monthlyMap: Record<
@@ -529,6 +580,129 @@ export const StatsDashboard: React.FC<Props> = ({
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate mt-0.5">
                 {periodOtherCount} transaksi biaya
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ringkasan Rincian Biaya Kendaraan (Dipindahkan dari Halaman Biaya, Terfilter Periode) */}
+        <div className="bg-white dark:bg-[#151c2c] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                <Wallet className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Ringkasan Biaya Kendaraan
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {selectedPeriod === "all"
+                    ? "Total akumulasi seluruh periode"
+                    : `Data bulan: ${
+                        availableMonths.find((m) => m.key === selectedPeriod)?.label ||
+                        selectedPeriod
+                      }`}
+                </p>
+              </div>
+            </div>
+
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("biaya")}
+                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
+              >
+                <span>Lihat Riwayat Biaya</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Banner Total Keseluruhan Pengeluaran */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-[#0d1320] dark:via-[#131b2c] dark:to-[#172136] text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between gap-3">
+            <div>
+              <span className="text-[11px] text-slate-300 font-medium block">
+                Total Biaya Keseluruhan (BBM + Operasional)
+              </span>
+              <div className="text-lg sm:text-xl md:text-2xl font-bold font-mono tracking-tight text-white mt-0.5">
+                {formatRupiah(expenseBreakdown.totalExpenseOverall)}
+              </div>
+            </div>
+            <div className="text-right text-[11px] text-slate-300 shrink-0">
+              <span className="font-semibold text-white">
+                {periodFuelCount + periodOtherCount}
+              </span>{" "}
+              total transaksi
+              <span className="block text-[10px] text-slate-400 mt-0.5">
+                {selectedPeriod === "all" ? "Semua Bulan" : "Periode Terpilih"}
+              </span>
+            </div>
+          </div>
+
+          {/* 4 Kartu Kategori Biaya: Bahan Bakar, Servis, E-Toll, Lainnya */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+            {/* 1. Bahan Bakar */}
+            <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 dark:text-blue-300 truncate">
+                  <Fuel className="w-3.5 h-3.5 shrink-0" />
+                  <span>Bahan Bakar</span>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
+                  {formatRupiah(periodFuelCost)}
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
+                {periodFuelCount}x pengisian
+              </span>
+            </div>
+
+            {/* 2. Servis & Bengkel */}
+            <div className="p-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 truncate">
+                  <Wrench className="w-3.5 h-3.5 shrink-0" />
+                  <span>Servis Bengkel</span>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
+                  {formatRupiah(expenseBreakdown.serviceCost)}
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
+                {expenseBreakdown.serviceCount}x servis
+              </span>
+            </div>
+
+            {/* 3. Top Up E-Toll */}
+            <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300 truncate">
+                  <CreditCard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Top Up E-Toll</span>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
+                  {formatRupiah(expenseBreakdown.etollCost)}
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
+                {expenseBreakdown.etollCount}x transaksi
+              </span>
+            </div>
+
+            {/* 4. Biaya Lainnya */}
+            <div className="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-500/10 border border-purple-100 dark:border-purple-500/20 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300 truncate">
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span>Biaya Lainnya</span>
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
+                  {formatRupiah(expenseBreakdown.lainnyaCost)}
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
+                {expenseBreakdown.lainnyaCount}x transaksi
               </span>
             </div>
           </div>

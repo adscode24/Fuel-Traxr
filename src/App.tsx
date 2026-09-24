@@ -441,6 +441,7 @@ export function App() {
           <BiayaPage
             vehicle={activeVehicle}
             serviceHistory={serviceHistory}
+            onSaveExpense={handleSaveServiceHistory}
             onAddExpense={(entry) => {
               const newEntry: ServiceHistoryEntry = {
                 ...entry,
