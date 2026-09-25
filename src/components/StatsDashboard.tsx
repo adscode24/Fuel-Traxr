@@ -36,6 +36,7 @@ import { Vehicle, FuelRecord, FuelEfficiencyUnit, ServiceHistoryEntry } from "..
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
 import { FuelPriceTodayCard } from "./FuelPriceTodayCard";
 import { StationLogo, detectStationBrand } from "./StationLogo";
+import { DashboardCardBottomSheet, DashboardCardType } from "./DashboardCardBottomSheet";
 
 interface Props {
   vehicle: Vehicle | null;
@@ -67,6 +68,9 @@ export const StatsDashboard: React.FC<Props> = ({
 
   // Selected period for dashboard KPI cards: "all" or specific month "YYYY-MM"
   const [selectedPeriod, setSelectedPeriod] = useState<string>("all");
+
+  // Bottom sheet detail state for KPI cards ("konsumsi", "bensin", "lainnya")
+  const [activeSheetCard, setActiveSheetCard] = useState<DashboardCardType | null>(null);
 
   // Selected mode for Pie Chart: "spbu" or "fuelType"
   const [pieChartMode, setPieChartMode] = useState<"spbu" | "fuelType">("spbu");
@@ -621,14 +625,22 @@ export const StatsDashboard: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* 3 KPI Cards: Konsumsi BBM, Biaya Bensin, Biaya Lainnya */}
+        {/* 3 KPI Cards: Konsumsi BBM, Biaya Bensin, Biaya Lainnya (Clickable to open Bottom Sheet) */}
         <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
           {/* Card 1: Konsumsi BBM */}
-          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-              Konsumsi BBM
-            </span>
-            <div className="mt-1.5 sm:mt-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setActiveSheetCard("konsumsi")}
+            aria-label="Lihat rincian riwayat konsumsi BBM"
+            className="group text-left bg-white dark:bg-[#151c2c] hover:bg-slate-50/80 dark:hover:bg-[#192235] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700/60 shadow-xs hover:shadow-sm flex flex-col justify-between min-w-0 overflow-hidden cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 truncate transition-colors">
+                Konsumsi BBM
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </div>
+            <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div className="flex items-baseline gap-0.5 sm:gap-1 text-slate-900 dark:text-white font-bold tracking-tight min-w-0">
                 <span className="text-xs sm:text-base md:text-lg font-bold truncate">
                   {displayPeriodEfficiency.value}
@@ -637,18 +649,31 @@ export const StatsDashboard: React.FC<Props> = ({
                   {displayPeriodEfficiency.unitLabel}
                 </span>
               </div>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block truncate mt-0.5">
-                {selectedPeriod === "all" ? "Rata-rata total" : "Bulan terpilih"}
-              </span>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium truncate">
+                  {selectedPeriod === "all" ? "Rata-rata total" : "Bulan terpilih"}
+                </span>
+                <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
+                  Rincian &rarr;
+                </span>
+              </div>
             </div>
-          </div>
+          </button>
 
           {/* Card 2: Biaya Bensin */}
-          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-              Biaya Bensin
-            </span>
-            <div className="mt-1.5 sm:mt-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setActiveSheetCard("bensin")}
+            aria-label="Lihat rincian biaya bensin"
+            className="group text-left bg-white dark:bg-[#151c2c] hover:bg-slate-50/80 dark:hover:bg-[#192235] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-700/60 shadow-xs hover:shadow-sm flex flex-col justify-between min-w-0 overflow-hidden cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 truncate transition-colors">
+                Biaya Bensin
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </div>
+            <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div
                 className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
                   Math.round(periodFuelCost).toLocaleString("id-ID")
@@ -662,18 +687,31 @@ export const StatsDashboard: React.FC<Props> = ({
                   {Math.round(periodFuelCost).toLocaleString("id-ID")}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate mt-0.5">
-                {periodFuelCount}x pengisian
-              </span>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                  {periodFuelCount}x pengisian
+                </span>
+                <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
+                  Rincian &rarr;
+                </span>
+              </div>
             </div>
-          </div>
+          </button>
 
           {/* Card 3: Biaya Lainnya (Servis, Etoll, Parkir, dll.) */}
-          <div className="bg-white dark:bg-[#151c2c] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between min-w-0 overflow-hidden">
-            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-              Biaya Lainnya
-            </span>
-            <div className="mt-1.5 sm:mt-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setActiveSheetCard("lainnya")}
+            aria-label="Lihat rincian biaya lainnya"
+            className="group text-left bg-white dark:bg-[#151c2c] hover:bg-slate-50/80 dark:hover:bg-[#192235] px-2.5 py-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-700/60 shadow-xs hover:shadow-sm flex flex-col justify-between min-w-0 overflow-hidden cursor-pointer transition-all active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 truncate transition-colors">
+                Biaya Lainnya
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-purple-500 group-hover:translate-x-0.5 transition-all shrink-0" />
+            </div>
+            <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div
                 className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
                   Math.round(periodOtherCost).toLocaleString("id-ID")
@@ -687,11 +725,16 @@ export const StatsDashboard: React.FC<Props> = ({
                   {Math.round(periodOtherCost).toLocaleString("id-ID")}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block truncate mt-0.5">
-                {periodOtherCount} transaksi biaya
-              </span>
+              <div className="flex items-center justify-between mt-0.5">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                  {periodOtherCount} transaksi
+                </span>
+                <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
+                  Rincian &rarr;
+                </span>
+              </div>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Ringkasan Rincian Biaya Kendaraan (Dipindahkan dari Halaman Biaya, Terfilter Periode) */}
@@ -1392,6 +1435,25 @@ export const StatsDashboard: React.FC<Props> = ({
           </div>
         )}
       </div>
+
+      {/* Bottom Sheet Detail for the 3 Cards (Konsumsi BBM, Biaya Bensin, Biaya Lainnya) */}
+      <DashboardCardBottomSheet
+        isOpen={!!activeSheetCard}
+        cardType={activeSheetCard}
+        onClose={() => setActiveSheetCard(null)}
+        selectedPeriod={selectedPeriod}
+        periodLabel={
+          selectedPeriod === "all"
+            ? "Semua Bulan (Total)"
+            : availableMonths.find((m) => m.key === selectedPeriod)?.label || selectedPeriod
+        }
+        vehicle={vehicle}
+        fuelRecords={periodFuelRecords}
+        maintenanceRecords={periodOtherExpenses}
+        fuelUnit={fuelUnit}
+        onOpenManualEntry={handleOpenAddAction}
+        onNavigateTab={onNavigateTab}
+      />
     </div>
   );
 };
