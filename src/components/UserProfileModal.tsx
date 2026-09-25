@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { logoutUser } from "../services/firebaseAuth";
+import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
   isOpen: boolean;
@@ -35,6 +36,8 @@ export const UserProfileModal: React.FC<Props> = ({
   onOpenSwitchAccount,
   onLoggedOut,
 }) => {
+  useAndroidBackButton({ isOpen, onClose, id: "user_profile" });
+
   const [loggingOut, setLoggingOut] = useState(false);
 
   if (!isOpen) return null;

@@ -216,38 +216,56 @@ export function saveStoredServiceHistory(history: ServiceHistoryEntry[], userId?
   }
 }
 
-// Recalculates consumption metrics for a list of records belonging to a vehicle
+// Recalculates consumption metrics partitioned by vehicleId so multiple vehicles do not mix odometers
 export function recalculateRecords(records: FuelRecord[]): FuelRecord[] {
   if (!records || records.length === 0) return [];
 
-  // Sort oldest to newest by odometer / date
-  const sorted = [...records].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return a.odometer - b.odometer;
-  });
+  // Group records by vehicleId
+  const byVehicle = new Map<string, FuelRecord[]>();
+  for (const r of records) {
+    const vId = r.vehicleId || "default";
+    const list = byVehicle.get(vId) || [];
+    list.push(r);
+    byVehicle.set(vId, list);
+  }
 
-  for (let i = 0; i < sorted.length; i++) {
-    if (i === 0) {
-      sorted[i].previousOdometer = undefined;
-      sorted[i].distanceTraveled = undefined;
-      sorted[i].fuelEfficiencyKmPerL = undefined;
-      sorted[i].costPerKm = undefined;
-    } else {
-      const prev = sorted[i - 1];
-      const dist = sorted[i].odometer - prev.odometer;
-      sorted[i].previousOdometer = prev.odometer;
-      if (dist > 0) {
-        sorted[i].distanceTraveled = dist;
-        if (sorted[i].liters > 0) {
-          sorted[i].fuelEfficiencyKmPerL = Number((dist / sorted[i].liters).toFixed(2));
-          sorted[i].costPerKm = Number((sorted[i].totalCost / dist).toFixed(2));
+  const allRecalculated: FuelRecord[] = [];
+
+  // Recalculate each vehicle's chronological stream independently
+  for (const [, list] of byVehicle.entries()) {
+    const sorted = [...list].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.odometer - b.odometer;
+    });
+
+    for (let i = 0; i < sorted.length; i++) {
+      if (i === 0) {
+        sorted[i].previousOdometer = undefined;
+        sorted[i].distanceTraveled = undefined;
+        sorted[i].fuelEfficiencyKmPerL = undefined;
+        sorted[i].costPerKm = undefined;
+      } else {
+        const prev = sorted[i - 1];
+        const dist = sorted[i].odometer - prev.odometer;
+        sorted[i].previousOdometer = prev.odometer;
+        if (dist > 0) {
+          sorted[i].distanceTraveled = dist;
+          if (sorted[i].liters > 0) {
+            sorted[i].fuelEfficiencyKmPerL = Number((dist / sorted[i].liters).toFixed(2));
+            sorted[i].costPerKm = Number((sorted[i].totalCost / dist).toFixed(2));
+          }
+        } else {
+          sorted[i].distanceTraveled = undefined;
+          sorted[i].fuelEfficiencyKmPerL = undefined;
+          sorted[i].costPerKm = undefined;
         }
       }
     }
+    allRecalculated.push(...sorted);
   }
 
-  // Return sorted newest to oldest for display
-  return sorted.sort((a, b) => {
+  // Return combined records sorted newest to oldest for display
+  return allRecalculated.sort((a, b) => {
     if (b.date !== a.date) return b.date.localeCompare(a.date);
     return b.odometer - a.odometer;
   });

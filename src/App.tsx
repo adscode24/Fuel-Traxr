@@ -36,6 +36,7 @@ import { VehicleSelectorModal } from "./components/VehicleSelectorModal";
 import { LocationPermissionBanner } from "./components/LocationPermissionBanner";
 import { AuthModal } from "./components/AuthModal";
 import { UserProfileModal } from "./components/UserProfileModal";
+import { OfflineIndicator } from "./components/OfflineIndicator";
 
 export function App() {
   // Auth state & loading
@@ -378,6 +379,9 @@ export function App() {
         </div>
       )}
 
+      {/* Offline Status Indicator */}
+      <OfflineIndicator />
+
       {/* Persistent Mobile Android-Style App Header */}
       <AndroidHeader
         activeVehicle={activeVehicle}
@@ -388,7 +392,7 @@ export function App() {
       />
 
       {/* Main Tab Content */}
-      <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5">
+      <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5 pb-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))]">
         {/* Tab 1: Dashboard / Home */}
         {activeTab === "home" && (
           <StatsDashboard

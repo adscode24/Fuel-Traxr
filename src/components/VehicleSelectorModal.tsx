@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Car, Bike, Plus, Check, X, Edit2, Gauge, Camera, Upload, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Vehicle } from "../types";
+import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
   isOpen: boolean;
@@ -21,6 +22,8 @@ export const VehicleSelectorModal: React.FC<Props> = ({
   onAddVehicle,
   onUpdateVehicle,
 }) => {
+  useAndroidBackButton({ isOpen, onClose, id: "vehicle_selector" });
+
   const [showAddForm, setShowAddForm] = useState(vehicles.length === 0);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 

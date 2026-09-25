@@ -21,6 +21,7 @@ import {
   sendResetPassword,
   googleSignIn,
 } from "../services/firebaseAuth";
+import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
   isOpen: boolean;
@@ -35,6 +36,8 @@ export const AuthModal: React.FC<Props> = ({
   initialMode = "login",
   onAuthSuccess,
 }) => {
+  useAndroidBackButton({ isOpen, onClose, id: "auth_modal" });
+
   const [mode, setMode] = useState<"login" | "register" | "forgot">(initialMode);
 
   // Form fields

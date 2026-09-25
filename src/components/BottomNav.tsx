@@ -31,7 +31,7 @@ export const BottomNav: React.FC<Props> = ({ activeTab, onChangeTab }) => {
   return (
     <nav
       id="floating-bottom-nav"
-      className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 px-3 sm:px-4 flex justify-center pointer-events-none transition-all"
+      className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] sm:bottom-6 inset-x-0 z-40 px-3 sm:px-4 flex justify-center pointer-events-none transition-all"
     >
       <div className="w-full max-w-md bg-white/95 dark:bg-[#151c2c]/95 backdrop-blur-xl border border-slate-200/90 dark:border-slate-700/80 shadow-[0_12px_36px_-4px_rgba(0,0,0,0.18),0_2px_8px_rgba(0,0,0,0.06)] rounded-2xl p-1.5 pointer-events-auto transition-all">
         <div className="grid grid-cols-5 gap-1 items-center">

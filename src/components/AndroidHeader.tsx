@@ -11,6 +11,7 @@ import {
 import { User } from "firebase/auth";
 import { Vehicle } from "../types";
 import { useTheme } from "../context/ThemeContext";
+import { PWAInstallButton } from "./PWAInstallButton";
 
 interface Props {
   activeVehicle: Vehicle | null;
@@ -32,7 +33,7 @@ export const AndroidHeader: React.FC<Props> = ({
   const displayName = user?.displayName || user?.email?.split("@")[0] || "Akun";
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#111724]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 transition-colors">
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#111724]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 transition-colors">
       <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
         {/* Left: App title / Vehicle Switcher or Register Vehicle Button */}
         {activeVehicle ? (
@@ -132,6 +133,9 @@ export const AndroidHeader: React.FC<Props> = ({
               <span>Masuk / Daftar</span>
             </button>
           )}
+
+          {/* Install App button if installable */}
+          <PWAInstallButton variant="compact" />
 
           {/* Theme Toggle */}
           <button

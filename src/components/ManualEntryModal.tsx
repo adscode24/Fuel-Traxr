@@ -26,6 +26,7 @@ import {
   SPBUStationOption,
   UserLocationInfo,
 } from "../services/locationService";
+import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
   isOpen: boolean;
@@ -56,6 +57,8 @@ export const ManualEntryModal: React.FC<Props> = ({
   editingRecord,
   onSaveRecord,
 }) => {
+  useAndroidBackButton({ isOpen, onClose, id: "manual_entry" });
+
   // Tanggal dan waktu pengisian secara default diisi dengan tanggal dan waktu saat melakukan pengisian, namun bisa diedit
   const [date, setDate] = useState(() => getNowDateTime().date);
   const [time, setTime] = useState(() => getNowDateTime().time);
