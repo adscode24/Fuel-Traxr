@@ -11,13 +11,23 @@ export function usePWAInstall() {
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Detect standalone mode (already installed on device)
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
-      document.referrer.includes("android-app://");
+    // Detect standalone mode (already installed on device as PWA or native APK)
+    const checkIsInstalled = () => {
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        window.matchMedia("(display-mode: fullscreen)").matches ||
+        window.matchMedia("(display-mode: minimal-ui)").matches ||
+        (window.navigator as unknown as { standalone?: boolean }).standalone === true ||
+        document.referrer.includes("android-app://") ||
+        (typeof window !== "undefined" &&
+          Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.())) ||
+        localStorage.getItem("app_installed_mode") === "true";
 
-    setIsInstalled(isStandalone);
+      return Boolean(isStandalone);
+    };
+
+    const isInstalledNow = checkIsInstalled();
+    setIsInstalled(isInstalledNow);
 
     // Detect iOS devices
     const userAgent = window.navigator.userAgent.toLowerCase();
@@ -32,6 +42,11 @@ export function usePWAInstall() {
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      try {
+        localStorage.setItem("app_installed_mode", "true");
+      } catch {
+        // ignore
+      }
     };
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);

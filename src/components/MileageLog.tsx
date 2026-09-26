@@ -47,20 +47,49 @@ export const MileageLog: React.FC<Props> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
-  const toggleMonth = (monthKey: string) => {
-    setCollapsedMonths((prev) => ({
-      ...prev,
-      [monthKey]: !prev[monthKey],
-    }));
+  // Current calendar month key (e.g. "2026-09")
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  // Determine if a month group should be collapsed
+  // Requirement: "accordion secara default tampil tertutup untuk bulan yang sudah lewat"
+  const isMonthCollapsed = (monthKey: string) => {
+    if (monthKey in collapsedMonths) {
+      return collapsedMonths[monthKey];
+    }
+    // Default: bulan yang sudah lewat (< currentMonthKey) tampil tertutup (collapsed)
+    if (monthKey !== "Lainnya" && monthKey < currentMonthKey) {
+      return true;
+    }
+    return false;
   };
 
-  const handleExpandAllMonths = () => setCollapsedMonths({});
-  const handleCollapseAllMonths = () => {
-    const allCollapsed: Record<string, boolean> = {};
-    monthGroups.forEach((g) => {
-      allCollapsed[g.key] = true;
+  const toggleMonth = (monthKey: string) => {
+    setCollapsedMonths((prev) => {
+      const currentVal = isMonthCollapsed(monthKey);
+      return {
+        ...prev,
+        [monthKey]: !currentVal,
+      };
     });
-    setCollapsedMonths(allCollapsed);
+  };
+
+  const handleExpandAllMonths = () => {
+    const allOpen: Record<string, boolean> = {};
+    monthGroups.forEach((g) => {
+      allOpen[g.key] = false;
+    });
+    setCollapsedMonths(allOpen);
+  };
+
+  const handleCollapseAllMonths = () => {
+    const allClosed: Record<string, boolean> = {};
+    monthGroups.forEach((g) => {
+      allClosed[g.key] = true;
+    });
+    setCollapsedMonths(allClosed);
   };
 
   // Support both prop names seamlessly
@@ -369,7 +398,7 @@ export const MileageLog: React.FC<Props> = ({
         );
         const monthAvgKmL =
           monthLiters > 0 && monthDist > 0 ? (monthDist / monthLiters).toFixed(2) : "-";
-        const isCollapsed = Boolean(collapsedMonths[monthKey]);
+        const isCollapsed = isMonthCollapsed(monthKey);
 
         return (
           <div key={monthKey} className="space-y-2.5">

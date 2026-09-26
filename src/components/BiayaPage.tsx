@@ -46,6 +46,25 @@ export const BiayaPage: React.FC<Props> = ({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
+  // Current calendar month key (e.g. "2026-09")
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  // Determine if a month group should be collapsed
+  // Requirement: "accordion secara default tampil tertutup untuk bulan yang sudah lewat"
+  const isMonthCollapsed = (monthKey: string) => {
+    if (monthKey in collapsedMonths) {
+      return collapsedMonths[monthKey];
+    }
+    // Default: bulan yang sudah lewat (< currentMonthKey) tampil tertutup (collapsed)
+    if (monthKey !== "Lainnya" && monthKey < currentMonthKey) {
+      return true;
+    }
+    return false;
+  };
+
   // Form State for Adding / Editing Expense
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState<string>("Service");
@@ -183,10 +202,29 @@ export const BiayaPage: React.FC<Props> = ({
 
   // Accordion toggle for month groups
   const toggleMonth = (monthKey: string) => {
-    setCollapsedMonths((prev) => ({
-      ...prev,
-      [monthKey]: !prev[monthKey],
-    }));
+    setCollapsedMonths((prev) => {
+      const currentVal = isMonthCollapsed(monthKey);
+      return {
+        ...prev,
+        [monthKey]: !currentVal,
+      };
+    });
+  };
+
+  const handleExpandAllMonths = () => {
+    const allOpen: Record<string, boolean> = {};
+    monthGroups.forEach((g) => {
+      allOpen[g.key] = false;
+    });
+    setCollapsedMonths(allOpen);
+  };
+
+  const handleCollapseAllMonths = () => {
+    const allClosed: Record<string, boolean> = {};
+    monthGroups.forEach((g) => {
+      allClosed[g.key] = true;
+    });
+    setCollapsedMonths(allClosed);
   };
 
   // Open modal for new expense
@@ -489,9 +527,34 @@ export const BiayaPage: React.FC<Props> = ({
       )}
 
       {/* Grouped Month Lists with Accordion Feature */}
+      {monthGroups.length > 1 && (
+        <div className="flex items-center justify-between px-1 pt-1 pb-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <span className="font-medium">
+            Riwayat per Bulan ({monthGroups.length} bulan)
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExpandAllMonths}
+              className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:underline cursor-pointer"
+            >
+              Buka Semua
+            </button>
+            <span>•</span>
+            <button
+              type="button"
+              onClick={handleCollapseAllMonths}
+              className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:underline cursor-pointer"
+            >
+              Tutup Semua
+            </button>
+          </div>
+        </div>
+      )}
+
       {monthGroups.map(({ key: monthKey, label: monthLabel, items: monthItems }) => {
         const monthTotal = monthItems.reduce((acc, h) => acc + (Number(h.cost) || 0), 0);
-        const isCollapsed = Boolean(collapsedMonths[monthKey]);
+        const isCollapsed = isMonthCollapsed(monthKey);
 
         return (
           <div key={monthKey} className="space-y-2.5">

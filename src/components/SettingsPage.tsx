@@ -30,6 +30,7 @@ import { FuelEfficiencyUnit, Vehicle, FuelRecord, ServiceHistoryEntry } from "..
 import { useTheme } from "../context/ThemeContext";
 import { DeviceBackupPayload, parseDeviceBackupFile } from "../services/storage";
 import { PWAInstallButton } from "./PWAInstallButton";
+import { usePWAInstall } from "../hooks/usePWAInstall";
 
 interface Props {
   fuelUnit: FuelEfficiencyUnit;
@@ -61,6 +62,7 @@ export const SettingsPage: React.FC<Props> = ({
   onSignOut,
 }) => {
   const { theme, setTheme } = useTheme();
+  const { isInstalled } = usePWAInstall();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [pendingBackupData, setPendingBackupData] = useState<Partial<DeviceBackupPayload> | null>(null);
@@ -122,13 +124,16 @@ export const SettingsPage: React.FC<Props> = ({
             Pengaturan &amp; Penyimpanan
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Kelola penyimpanan lokal di perangkat, instalasi APK Android, cadangan offline, dan tema.
+            {isInstalled
+              ? "Kelola penyimpanan lokal di perangkat, cadangan offline, dan tema."
+              : "Kelola penyimpanan lokal di perangkat, instalasi APK Android, cadangan offline, dan tema."}
           </p>
         </div>
       </div>
 
-      {/* 0. Kesiapan & Instalasi Android APK (PWA & Native Capacitor) */}
-      <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">
+      {/* 0. Kesiapan & Instalasi Android APK (PWA & Native Capacitor) - Disembunyikan jika aplikasi sudah terpasang di HP */}
+      {!isInstalled && (
+        <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -225,6 +230,7 @@ export const SettingsPage: React.FC<Props> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* 1. Penyimpanan Lokal di Perangkat (Device-Only Storage & Backup) */}
       <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">

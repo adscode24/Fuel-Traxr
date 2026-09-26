@@ -35,7 +35,7 @@ export const ALL_BRANDS: FuelBrandInfo[] = [
  * Note: Each item has isAvailable flag. Only available fuels and brands with available fuels will be shown.
  */
 export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
-  // Pertamina
+  // Pertamina (DKI Jakarta & Jawa-Bali Baseline)
   {
     id: "pertamina-pertalite",
     brand: "pertamina",
@@ -68,7 +68,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Pertamax Green 95",
     category: "Bensin",
     octaneOrGrade: "RON 95",
-    price: 13900,
+    price: 13650,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -81,7 +81,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Pertamax Turbo",
     category: "Bensin",
     octaneOrGrade: "RON 98",
-    price: 14400,
+    price: 14475,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -106,7 +106,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Dexlite",
     category: "Diesel",
     octaneOrGrade: "CN 51",
-    price: 13050,
+    price: 14050,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -118,7 +118,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Pertamina Dex",
     category: "Diesel",
     octaneOrGrade: "CN 53",
-    price: 13400,
+    price: 14550,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -132,7 +132,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Shell Super",
     category: "Bensin",
     octaneOrGrade: "RON 92",
-    price: 12930,
+    price: 13450,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -144,7 +144,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Shell V-Power",
     category: "Bensin",
     octaneOrGrade: "RON 95",
-    price: 13590,
+    price: 14280,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -156,7 +156,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Shell V-Power Nitro+",
     category: "Bensin",
     octaneOrGrade: "RON 98",
-    price: 13820,
+    price: 14480,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -168,7 +168,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Shell V-Power Diesel",
     category: "Diesel",
     octaneOrGrade: "CN 51",
-    price: 13720,
+    price: 14660,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -182,7 +182,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "BP 92",
     category: "Bensin",
     octaneOrGrade: "RON 92",
-    price: 12850,
+    price: 13450,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -194,7 +194,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "BP Ultimate",
     category: "Bensin",
     octaneOrGrade: "RON 95",
-    price: 13590,
+    price: 14280,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -206,7 +206,19 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "BP Diesel",
     category: "Diesel",
     octaneOrGrade: "CN 51",
-    price: 13600,
+    price: 14200,
+    unit: "/ L",
+    status: "stabil",
+    isAvailable: true,
+  },
+  {
+    id: "bp-ultimate-diesel",
+    brand: "bp",
+    brandName: "BP-AKR",
+    fuelName: "BP Ultimate Diesel",
+    category: "Diesel",
+    octaneOrGrade: "CN 53",
+    price: 14660,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -220,7 +232,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Revvo 90",
     category: "Bensin",
     octaneOrGrade: "RON 90",
-    price: 12700,
+    price: 11950,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -232,7 +244,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Revvo 92",
     category: "Bensin",
     octaneOrGrade: "RON 92",
-    price: 12900,
+    price: 13450,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -244,7 +256,7 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
     fuelName: "Revvo 95",
     category: "Bensin",
     octaneOrGrade: "RON 95",
-    price: 13550,
+    price: 14200,
     unit: "/ L",
     status: "stabil",
     isAvailable: true,
@@ -291,8 +303,8 @@ export const INITIAL_FUEL_PRICES: FuelPriceItem[] = [
   },
 ];
 
-const STORAGE_CUSTOM_FUEL_KEY = "bbm_fuel_prices_custom_v2";
-const STORAGE_LAST_REFRESH_KEY = "bbm_fuel_prices_last_refresh_v2";
+const STORAGE_CUSTOM_FUEL_KEY = "bbm_fuel_prices_catalog_v3";
+const STORAGE_LAST_REFRESH_KEY = "bbm_fuel_prices_last_refresh_v3";
 
 /**
  * Returns formatted daily date in Indonesian (e.g., "Minggu, 20 September 2026")
@@ -307,7 +319,8 @@ export function getDailyUpdateDateFormatted(): string {
 }
 
 /**
- * Retrieves all stored fuel price items (including custom availability or price edits)
+ * Retrieves all fuel price items guaranteed to have the latest official prices
+ * while respecting any user availability toggles from localStorage.
  */
 export function getAllFuelPriceItems(): FuelPriceItem[] {
   try {
@@ -315,15 +328,20 @@ export function getAllFuelPriceItems(): FuelPriceItem[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Merge with any missing initial items to guarantee up-to-date catalog
-        const map = new Map<string, FuelPriceItem>();
-        INITIAL_FUEL_PRICES.forEach((item) => map.set(item.id, { ...item }));
-        parsed.forEach((custom: FuelPriceItem) => {
-          if (custom && custom.id) {
-            map.set(custom.id, { ...map.get(custom.id), ...custom });
+        // Extract custom availability toggles only so prices always stay up-to-date
+        const availabilityMap = new Map<string, boolean>();
+        parsed.forEach((custom: Partial<FuelPriceItem>) => {
+          if (custom && custom.id && typeof custom.isAvailable === "boolean") {
+            availabilityMap.set(custom.id, custom.isAvailable);
           }
         });
-        return Array.from(map.values());
+
+        return INITIAL_FUEL_PRICES.map((item) => ({
+          ...item,
+          isAvailable: availabilityMap.has(item.id)
+            ? availabilityMap.get(item.id)!
+            : item.isAvailable,
+        }));
       }
     }
   } catch (err) {
@@ -406,7 +424,12 @@ export function toggleBrandAvailability(brandId: FuelBrandId, isAvailable: boole
  * Resets fuel prices and availability back to official defaults
  */
 export function resetFuelPricesToDefault(): FuelPriceItem[] {
-  localStorage.removeItem(STORAGE_CUSTOM_FUEL_KEY);
-  localStorage.setItem(STORAGE_LAST_REFRESH_KEY, new Date().toISOString());
+  try {
+    localStorage.removeItem(STORAGE_CUSTOM_FUEL_KEY);
+    localStorage.removeItem("bbm_fuel_prices_custom_v2");
+    localStorage.setItem(STORAGE_LAST_REFRESH_KEY, new Date().toISOString());
+  } catch {
+    // ignore
+  }
   return INITIAL_FUEL_PRICES;
 }

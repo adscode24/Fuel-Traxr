@@ -158,6 +158,11 @@ export const FuelPriceTodayCard: React.FC<Props> = ({
   const handleRefreshDaily = () => {
     setIsRefreshing(true);
     setTimeout(() => {
+      try {
+        localStorage.removeItem("bbm_fuel_prices_custom_v2");
+      } catch {
+        // ignore
+      }
       const fresh = getAllFuelPriceItems();
       setAllPrices(fresh);
       setIsRefreshing(false);
