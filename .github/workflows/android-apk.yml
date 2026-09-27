@@ -7,6 +7,8 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'resources/**'
+      - 'scripts/**'
       - 'index.html'
       - 'package.json'
       - 'vite.config.ts'
@@ -54,6 +56,9 @@ jobs:
             npx cap add android
           fi
 
+      - name: Generate Android launcher icons from resources/icon.svg
+        run: npm run assets:android
+
       - name: Sync Capacitor
         run: npx cap sync android
 
@@ -66,7 +71,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: fuel-traxr-debug-apk
+          name: digifuel-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

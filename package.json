@@ -12,7 +12,8 @@
     "lint": "tsc --noEmit",
     "build:android": "vite build && cap sync android",
     "cap:sync": "cap sync",
-    "cap:open": "cap open android"
+    "cap:open": "cap open android",
+    "assets:android": "node scripts/generate-android-icon.mjs && capacitor-assets generate --android --iconBackgroundColor '#5FB6E9' --splashBackgroundColor '#0c1017'"
   },
   "dependencies": {
     "@capacitor/cli": "^8.5.2",
@@ -37,6 +38,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
