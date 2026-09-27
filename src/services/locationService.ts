@@ -530,18 +530,49 @@ function estimateCityFromCoords(lat: number, lon: number) {
  */
 async function getDeviceCoordinates(): Promise<{ latitude: number; longitude: number }> {
   if (isNativePlatform()) {
+    const deniedMsg =
+      "Akses lokasi ditolak. Buka Pengaturan HP → Aplikasi → DigiFuel → Izin → aktifkan Lokasi, lalu coba lagi.";
     try {
+      // 1. Cek status izin dulu — kalau sudah ditolak permanen,
+      //    dialog sistem tidak akan muncul lagi, langsung arahkan ke Pengaturan.
       try {
-        await Geolocation.requestPermissions();
-      } catch {
+        const checked = await Geolocation.checkPermissions();
+        if (checked.location === "denied" && checked.coarseLocation === "denied") {
+          throw new Error(deniedMsg);
+        }
+      } catch (err: unknown) {
+        if ((err as Error)?.message === deniedMsg) throw err;
+        // checkPermissions gagal (plugin lama) — lanjut ke request.
+      }
+      // 2. Minta izin resmi ke sistem (memunculkan dialog izin Android).
+      try {
+        const req = await Geolocation.requestPermissions();
+        if (req.location === "denied" && req.coarseLocation === "denied") {
+          throw new Error(deniedMsg);
+        }
+      } catch (err: unknown) {
+        if ((err as Error)?.message === deniedMsg) throw err;
         // Lanjut — getCurrentPosition akan memberi pesan error yang jelas bila ditolak.
       }
-      const pos = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000,
-      });
-      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      // 3. Baca posisi: coba akurasi tinggi dulu (GPS), fallback ke akurasi
+      //    rendah (WiFi/seluler) yang jauh lebih cepat & hemat daya di dalam ruangan.
+      try {
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 30000,
+        });
+        return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      } catch (firstErr: unknown) {
+        const msg = (firstErr as Error)?.message || "";
+        if (/denied|permission|not authorized/i.test(msg)) throw new Error(deniedMsg);
+        const retry = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: false,
+          timeout: 20000,
+          maximumAge: 120000,
+        });
+        return { latitude: retry.coords.latitude, longitude: retry.coords.longitude };
+      }
     } catch (err: unknown) {
       throw new Error(mapNativeLocationError(err));
     }
