@@ -42,6 +42,21 @@ export class CloudSyncError extends Error {
 
 const VAULT_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // tanpa I,O,0,1 agar mudah dibaca
 
+/**
+ * Firestore MENOLAK nilai `undefined` (melempar "Unsupported field value").
+ * Objek aplikasi (kendaraan, catatan BBM, servis) punya banyak field opsional
+ * yang sering `undefined` (mis. `image`, `notes`, `octaneOrGrade`, `odometer`).
+ * Klon JSON menghilangkan semua key undefined secara rekursif sehingga
+ * setiap push vault dijamin tidak pernah crash karena ini.
+ */
+function sanitizeForFirestore<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value ?? null)) as T;
+  } catch {
+    return value;
+  }
+}
+
 /** Kode Vault Cloud, mis. "DF-7KQ2XA". Unik per akun, dibuat sekali lalu permanen. */
 export function generateVaultCode(): string {
   let suffix = "";
@@ -140,10 +155,10 @@ export async function ensureUserVault(
     // Belum ada -> buat baru, bawa data lokal HP pertama jika ada
     const vaultCode = generateVaultCode();
     const fresh: CloudVault = {
-      vehicles: initialLocal?.vehicles ?? [],
-      fuelRecords: initialLocal?.fuelRecords ?? [],
-      services: initialLocal?.services ?? [],
-      serviceHistory: initialLocal?.serviceHistory ?? [],
+      vehicles: sanitizeForFirestore(initialLocal?.vehicles ?? []),
+      fuelRecords: sanitizeForFirestore(initialLocal?.fuelRecords ?? []),
+      services: sanitizeForFirestore(initialLocal?.services ?? []),
+      serviceHistory: sanitizeForFirestore(initialLocal?.serviceHistory ?? []),
       ownerEmail: user.email ?? null,
       displayName: user.displayName ?? null,
       vaultCode,
@@ -168,10 +183,10 @@ export async function pushVault(
     await setDoc(
       vaultDocRef(user.uid),
       {
-        vehicles: payload.vehicles,
-        fuelRecords: payload.fuelRecords,
-        services: payload.services,
-        serviceHistory: payload.serviceHistory,
+        vehicles: sanitizeForFirestore(payload.vehicles),
+        fuelRecords: sanitizeForFirestore(payload.fuelRecords),
+        services: sanitizeForFirestore(payload.services),
+        serviceHistory: sanitizeForFirestore(payload.serviceHistory),
         ownerEmail: user.email ?? null,
         displayName: user.displayName ?? null,
         vaultCode,
