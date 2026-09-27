@@ -9,7 +9,6 @@ import {
   EyeOff,
   CheckCircle2,
   AlertCircle,
-  Fuel,
   ArrowRight,
   ShieldCheck,
   Sparkles,
@@ -21,6 +20,8 @@ import {
   sendResetPassword,
   googleSignIn,
 } from "../services/firebaseAuth";
+import { isNativePlatform } from "../services/firebase";
+import { AppLogo } from "./AppLogo";
 import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
@@ -57,6 +58,8 @@ export const AuthModal: React.FC<Props> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const isNative = isNativePlatform();
 
   // Password strength calculation
   const getPasswordStrength = (pass: string) => {
@@ -204,12 +207,10 @@ export const AuthModal: React.FC<Props> = ({
           </button>
 
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center shadow-inner">
-              <Fuel className="w-6 h-6 text-white" />
-            </div>
+            <AppLogo size={48} rounded="rounded-2xl" />
             <div>
               <div className="flex items-center gap-1.5">
-                <h2 className="text-lg font-extrabold tracking-tight">BBM Tracker ID</h2>
+                <h2 className="text-lg font-extrabold tracking-tight">DigiFuel ID</h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/40 text-blue-100 border border-white/20">
                   Akun Cloud
                 </span>
@@ -367,6 +368,10 @@ export const AuthModal: React.FC<Props> = ({
                   </>
                 )}
               </button>
+
+              <p className="text-[11px] text-center text-slate-500 dark:text-slate-400 leading-relaxed">
+                Satu akun untuk semua perangkat — daftar sekali di web, lalu masuk dengan email & sandi yang sama di HP Android mana pun.
+              </p>
             </form>
           )}
 
@@ -579,7 +584,7 @@ export const AuthModal: React.FC<Props> = ({
           )}
 
           {/* Divider: atau login dengan */}
-          {mode !== "forgot" && (
+          {mode !== "forgot" && !isNative && (
             <>
               <div className="relative my-3">
                 <div className="absolute inset-0 flex items-center">
@@ -629,6 +634,23 @@ export const AuthModal: React.FC<Props> = ({
               </button>
 
               {/* Guest / Offline Mode */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  id="btn-continue-guest"
+                  onClick={onClose}
+                  className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition underline underline-offset-2"
+                >
+                  Lanjutkan sebagai Tamu (Data tersimpan di perangkat ini)
+                </button>
+              </div>
+            </>
+          )}
+          {mode !== "forgot" && isNative && (
+            <>
+              <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
+                Di aplikasi Android native, masuk dengan <b>Email & Kata Sandi</b>. Akun yang sama di HP lain akan menampilkan data yang sama dan tersinkron otomatis via Cloud Vault.
+              </div>
               <div className="text-center pt-2">
                 <button
                   type="button"

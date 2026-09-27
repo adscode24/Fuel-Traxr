@@ -25,6 +25,9 @@ interface Props {
   recordsCount: number;
   onOpenSwitchAccount: () => void;
   onLoggedOut: () => void;
+  vaultCode?: string;
+  cloudStatus?: "local" | "connecting" | "synced" | "syncing" | "error" | "offline";
+  lastSyncedAt?: string | null;
 }
 
 export const UserProfileModal: React.FC<Props> = ({
@@ -35,6 +38,9 @@ export const UserProfileModal: React.FC<Props> = ({
   recordsCount,
   onOpenSwitchAccount,
   onLoggedOut,
+  vaultCode = "",
+  cloudStatus = "local",
+  lastSyncedAt = null,
 }) => {
   useAndroidBackButton({ isOpen, onClose, id: "user_profile" });
 
@@ -134,6 +140,24 @@ export const UserProfileModal: React.FC<Props> = ({
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span className="text-[11px] leading-relaxed">
               Data Anda aman dan terisolasi khusus untuk akun <strong>{displayName}</strong>.
+              {vaultCode ? (
+                <span className="block mt-1">
+                  Kode Vault Cloud: <strong className="font-mono tracking-widest">{vaultCode}</strong>
+                  <span className="block text-emerald-700/80 dark:text-emerald-300/80">
+                    {cloudStatus === "synced"
+                      ? `Tersinkron${lastSyncedAt ? " • " + new Date(lastSyncedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) : ""}`
+                      : cloudStatus === "offline"
+                      ? "Offline — akan sinkron otomatis saat online"
+                      : cloudStatus === "error"
+                      ? "Gagal sinkron — data aman lokal"
+                      : "Menghubungkan cloud…"}
+                  </span>
+                </span>
+              ) : (
+                <span className="block mt-1 text-amber-700 dark:text-amber-300">
+                  Vault cloud belum aktif (akun lokal/offline).
+                </span>
+              )}
             </span>
           </div>
 

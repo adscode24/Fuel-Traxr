@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { User } from "firebase/auth";
-import { Fuel, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Vehicle,
   FuelRecord,
@@ -23,8 +23,17 @@ import {
   DeviceBackupPayload,
 } from "./services/storage";
 import { initAuth, logoutGoogle } from "./services/firebaseAuth";
+import { isCloudCapableUid } from "./services/firebase";
+import {
+  ensureUserVault,
+  pushVault,
+  subscribeVault,
+  CloudSyncError,
+} from "./services/cloudSync";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
 
 import { AndroidHeader } from "./components/AndroidHeader";
+import { AppLogo } from "./components/AppLogo";
 import { BottomNav, NavTab } from "./components/BottomNav";
 import { MileageLog } from "./components/MileageLog";
 import { StatsDashboard } from "./components/StatsDashboard";
@@ -79,6 +88,21 @@ export function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Cloud Vault Sync State (online multi-device)
+  const [vaultCode, setVaultCode] = useState<string>("");
+  const [cloudStatus, setCloudStatus] = useState<
+    "local" | "connecting" | "synced" | "syncing" | "error" | "offline"
+  >("local");
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isOnline = useOnlineStatus();
+  const applyingCloudRef = useRef(false);
+  const justAppliedRef = useRef(false);
+  const lastCloudUpdatedAtRef = useRef<string>("");
+  const lastPushedAtRef = useRef<string>("");
+  const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Show temporary toast notification
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -116,6 +140,262 @@ export function App() {
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, []);
+
+  // Cloud Vault: setup + realtime subscription per akun Firebase asli.
+  // Akun lokal/sintetis (usr_...) tetap offline-only dan tidak menyentuh cloud.
+  useEffect(() => {
+    // Reset penanda antar akun
+    lastCloudUpdatedAtRef.current = "";
+    lastPushedAtRef.current = "";
+    justAppliedRef.current = false;
+    applyingCloudRef.current = false;
+    if (pushTimerRef.current) {
+      clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = null;
+    }
+
+    if (!user || !isCloudCapableUid(user.uid)) {
+      setVaultCode("");
+      setCloudStatus("local");
+      setCloudError(null);
+      setLastSyncedAt(null);
+      setIsSyncing(false);
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    setCloudStatus(isOnline ? "connecting" : "offline");
+    setCloudError(null);
+
+    (async () => {
+      try {
+        // Data lokal HP ini sebagai modal awal jika vault belum ada di cloud.
+        // Jika akun Firebase baru login di perangkat ini (storage uid masih kosong)
+        // tapi ada data Tamu offline, migrasikan data Tamu agar tidak hilang.
+        const scopedSnapshot = {
+          vehicles: getStoredVehicles(user.uid),
+          fuelRecords: getStoredFuelRecords(user.uid),
+          services: getStoredServices(user.uid),
+          serviceHistory: getStoredServiceHistory(user.uid),
+        };
+        const scopedEmpty =
+          scopedSnapshot.vehicles.length === 0 &&
+          scopedSnapshot.fuelRecords.length === 0 &&
+          scopedSnapshot.services.length === 0 &&
+          scopedSnapshot.serviceHistory.length === 0;
+        const guestSnapshot = {
+          vehicles: getStoredVehicles(null),
+          fuelRecords: getStoredFuelRecords(null),
+          services: getStoredServices(null),
+          serviceHistory: getStoredServiceHistory(null),
+        };
+        const guestHasData =
+          guestSnapshot.vehicles.length > 0 ||
+          guestSnapshot.fuelRecords.length > 0 ||
+          guestSnapshot.services.length > 0 ||
+          guestSnapshot.serviceHistory.length > 0;
+        const localSnapshot = scopedEmpty && guestHasData ? guestSnapshot : scopedSnapshot;
+        const vault = await ensureUserVault(user, localSnapshot);
+        if (cancelled) return;
+        setVaultCode(vault.vaultCode || "");
+        lastCloudUpdatedAtRef.current = vault.updatedAt || "";
+        setLastSyncedAt(vault.updatedAt || null);
+
+        // Jika cloud punya data lebih baru/lengkap daripada lokal, pakai cloud.
+        const localEmpty =
+          localSnapshot.vehicles.length === 0 &&
+          localSnapshot.fuelRecords.length === 0 &&
+          localSnapshot.serviceHistory.length === 0;
+        const cloudHasData =
+          vault.vehicles.length > 0 ||
+          vault.fuelRecords.length > 0 ||
+          vault.serviceHistory.length > 0;
+        if (localEmpty && cloudHasData) {
+          applyingCloudRef.current = true;
+          justAppliedRef.current = true;
+          setVehicles(vault.vehicles);
+          saveStoredVehicles(vault.vehicles, user.uid);
+          setActiveVehicleId(vault.vehicles[0]?.id || "");
+          const calc = recalculateRecords(vault.fuelRecords);
+          setRecords(calc);
+          saveStoredFuelRecords(calc, user.uid);
+          setServices(vault.services);
+          saveStoredServices(vault.services, user.uid);
+          setServiceHistory(vault.serviceHistory);
+          saveStoredServiceHistory(vault.serviceHistory, user.uid);
+          setTimeout(() => {
+            applyingCloudRef.current = false;
+          }, 0);
+        } else if (!localEmpty && !cloudHasData) {
+          // HP pertama: vault baru saja dibuat dari localSnapshot di ensureUserVault
+          lastPushedAtRef.current = vault.updatedAt || "";
+        }
+
+        setCloudStatus(navigator.onLine ? "synced" : "offline");
+
+        unsubscribe = subscribeVault(
+          user,
+          (remote) => {
+            if (cancelled) return;
+            if (!remote) return;
+            if (remote.vaultCode) setVaultCode(remote.vaultCode);
+            // Echo dari push kita sendiri -> jangan timpa balik
+            if (remote.updatedAt && remote.updatedAt === lastPushedAtRef.current) {
+              lastCloudUpdatedAtRef.current = remote.updatedAt;
+              setLastSyncedAt(remote.updatedAt);
+              setCloudStatus(navigator.onLine ? "synced" : "offline");
+              return;
+            }
+            if (remote.updatedAt && remote.updatedAt === lastCloudUpdatedAtRef.current) return;
+            // Ada edit lokal yang belum terkirim -> menangkan lokal, push akan jalan
+            if (pushTimerRef.current) return;
+            applyingCloudRef.current = true;
+            justAppliedRef.current = true;
+            lastCloudUpdatedAtRef.current = remote.updatedAt || "";
+            setVehicles(remote.vehicles);
+            saveStoredVehicles(remote.vehicles, user.uid);
+            setActiveVehicleId((prev) => {
+              if (prev && remote.vehicles.some((v) => v.id === prev)) return prev;
+              return remote.vehicles[0]?.id || "";
+            });
+            const calcRemote = recalculateRecords(remote.fuelRecords);
+            setRecords(calcRemote);
+            saveStoredFuelRecords(calcRemote, user.uid);
+            setServices(remote.services);
+            saveStoredServices(remote.services, user.uid);
+            setServiceHistory(remote.serviceHistory);
+            saveStoredServiceHistory(remote.serviceHistory, user.uid);
+            setLastSyncedAt(remote.updatedAt || null);
+            setCloudStatus(navigator.onLine ? "synced" : "offline");
+            setCloudError(null);
+            setTimeout(() => {
+              applyingCloudRef.current = false;
+            }, 0);
+          },
+          (err: CloudSyncError) => {
+            if (cancelled) return;
+            if (!navigator.onLine) {
+              setCloudStatus("offline");
+              setCloudError(null);
+            } else {
+              setCloudStatus("error");
+              setCloudError(err.message);
+            }
+          }
+        );
+      } catch (err: unknown) {
+        if (cancelled) return;
+        const msg = (err as Error)?.message || "Gagal menghubungkan cloud.";
+        if (!navigator.onLine) {
+          setCloudStatus("offline");
+          setCloudError(null);
+        } else {
+          setCloudStatus("error");
+          setCloudError(msg);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+      if (pushTimerRef.current) {
+        clearTimeout(pushTimerRef.current);
+        pushTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Cloud Vault: dorong setiap perubahan lokal (debounced) agar semua perangkat sinkron.
+  useEffect(() => {
+    if (!user || !isCloudCapableUid(user.uid)) return;
+    if (!vaultCode) return;
+    if (applyingCloudRef.current || justAppliedRef.current) {
+      justAppliedRef.current = false;
+      return;
+    }
+    if (!navigator.onLine) {
+      setCloudStatus("offline");
+      return;
+    }
+    setCloudStatus("syncing");
+    if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(async () => {
+      pushTimerRef.current = null;
+      if (!navigator.onLine) {
+        setCloudStatus("offline");
+        return;
+      }
+      setIsSyncing(true);
+      try {
+        const updatedAt = await pushVault(user, vaultCode, {
+          vehicles,
+          fuelRecords: records,
+          services,
+          serviceHistory,
+        });
+        lastPushedAtRef.current = updatedAt;
+        lastCloudUpdatedAtRef.current = updatedAt;
+        setLastSyncedAt(updatedAt);
+        setCloudStatus("synced");
+        setCloudError(null);
+      } catch (err: unknown) {
+        const msg = (err as Error)?.message || "Gagal sinkron ke cloud.";
+        if (!navigator.onLine) {
+          setCloudStatus("offline");
+          setCloudError(null);
+        } else {
+          setCloudStatus("error");
+          setCloudError(msg);
+        }
+      } finally {
+        setIsSyncing(false);
+      }
+    }, 900);
+    return () => {
+      if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
+    };
+  }, [vehicles, records, services, serviceHistory, user, vaultCode]);
+
+  // Sinkron manual (tombol di Settings)
+  const handleSyncNow = useCallback(async () => {
+    if (!user || !isCloudCapableUid(user.uid) || !vaultCode) return;
+    if (pushTimerRef.current) {
+      clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = null;
+    }
+    if (!navigator.onLine) {
+      setCloudStatus("offline");
+      showToast("Offline — data aman di perangkat, akan tersinkron saat online.");
+      return;
+    }
+    setIsSyncing(true);
+    setCloudStatus("syncing");
+    try {
+      const updatedAt = await pushVault(user, vaultCode, {
+        vehicles,
+        fuelRecords: records,
+        services,
+        serviceHistory,
+      });
+      lastPushedAtRef.current = updatedAt;
+      lastCloudUpdatedAtRef.current = updatedAt;
+      setLastSyncedAt(updatedAt);
+      setCloudStatus("synced");
+      setCloudError(null);
+      showToast("Cloud tersinkron — semua perangkat kini sama.");
+    } catch (err: unknown) {
+      setCloudStatus("error");
+      setCloudError((err as Error)?.message || "Gagal sinkron.");
+      showToast("Gagal sinkron cloud. Coba lagi saat online.");
+    } finally {
+      setIsSyncing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, vaultCode, vehicles, records, services, serviceHistory]);
 
   // Compute active vehicle object
   const activeVehicle = useMemo(() => {
@@ -319,15 +599,26 @@ export function App() {
     showToast("Data cadangan berhasil dipulihkan ke perangkat!");
   };
 
-  // Reset all local app data
+  // Reset all data (lokal + cloud jika login cloud)
   const handleResetAllData = () => {
-    resetAllAppData();
-    setVehicles(getStoredVehicles());
+    const uid = user?.uid ?? null;
+    resetAllAppData(uid);
+    setVehicles([]);
+    saveStoredVehicles([], uid);
     setRecords([]);
+    saveStoredFuelRecords([], uid);
     setServices([]);
+    saveStoredServices([], uid);
     setServiceHistory([]);
+    saveStoredServiceHistory([], uid);
     setActiveVehicleId("");
-    showToast("Semua data lokal telah dibersihkan.");
+    // Push kosong ke cloud otomatis via efek sync; kosongkan penanda echo agar tidak dianggap pantulan
+    lastPushedAtRef.current = "";
+    showToast(
+      user && isCloudCapableUid(user.uid)
+        ? "Semua data dihapus di perangkat & cloud."
+        : "Semua data lokal telah dibersihkan."
+    );
   };
 
   // Auth & Profile UI Handlers
@@ -356,15 +647,26 @@ export function App() {
     }
   };
 
+  // Refleksikan perubahan online/offline pada badge status cloud
+  useEffect(() => {
+    if (!user || !isCloudCapableUid(user.uid)) return;
+    if (!isOnline) {
+      setCloudStatus("offline");
+    } else {
+      setCloudStatus((prev) => (prev === "offline" ? (vaultCode ? "synced" : "connecting") : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="flex items-center gap-3 text-blue-500 mb-3">
-          <Fuel className="w-8 h-8 animate-bounce" />
-          <Loader2 className="w-6 h-6 animate-spin" />
+        <div className="flex items-center gap-3 mb-3">
+          <AppLogo size={56} rounded="rounded-3xl" className="animate-bounce" />
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
         </div>
         <div className="text-white font-bold text-sm tracking-wide">
-          Memuat Fuel Tracker...
+          Memuat DigiFuel...
         </div>
       </div>
     );
@@ -379,8 +681,13 @@ export function App() {
         </div>
       )}
 
-      {/* Offline Status Indicator */}
-      <OfflineIndicator />
+      {/* Offline + Cloud Status Indicator */}
+      <OfflineIndicator
+        cloudStatus={cloudStatus}
+        cloudError={cloudError}
+        isSyncing={isSyncing}
+        lastSyncedAt={lastSyncedAt}
+      />
 
       {/* Persistent Mobile Android-Style App Header */}
       <AndroidHeader
@@ -472,7 +779,7 @@ export function App() {
           />
         )}
 
-        {/* Tab 5: Setting (Device Storage, Satuan Unit Ukur, Tema, Reset Data) */}
+        {/* Tab 5: Setting (Cloud Vault, Device Storage, Satuan Unit Ukur, Tema, Reset Data) */}
         {activeTab === "setting" && (
           <SettingsPage
             fuelUnit={fuelUnit}
@@ -487,6 +794,12 @@ export function App() {
             onOpenAuth={handleOpenAuth}
             onOpenProfile={handleOpenProfile}
             onSignOut={handleLoggedOut}
+            vaultCode={vaultCode}
+            cloudStatus={cloudStatus}
+            cloudError={cloudError}
+            lastSyncedAt={lastSyncedAt}
+            isSyncing={isSyncing}
+            onSyncNow={handleSyncNow}
           />
         )}
       </main>
@@ -545,6 +858,9 @@ export function App() {
           recordsCount={records.length}
           onOpenSwitchAccount={() => handleOpenAuth("login")}
           onLoggedOut={handleLoggedOut}
+          vaultCode={vaultCode}
+          cloudStatus={cloudStatus}
+          lastSyncedAt={lastSyncedAt}
         />
       )}
     </div>

@@ -8,7 +8,6 @@ import {
   EyeOff,
   CheckCircle2,
   AlertCircle,
-  Fuel,
   ArrowRight,
   ShieldCheck,
   Sparkles,
@@ -22,6 +21,7 @@ import {
   googleSignIn,
   loginAsGuest,
 } from "../services/firebaseAuth";
+import { AppLogo } from "./AppLogo";
 
 interface Props {
   onAuthSuccess: (user: User) => void;
@@ -196,8 +196,8 @@ export const AuthPage: React.FC<Props> = ({ onAuthSuccess }) => {
       <div className="w-full max-w-md bg-white dark:bg-[#151c2c] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden my-4">
         {/* Hero Header */}
         <div className="relative bg-gradient-to-br from-blue-600 via-indigo-600 to-blue-700 p-7 text-white text-center">
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-white/15 backdrop-blur-xs border border-white/20 flex items-center justify-center shadow-lg mb-3">
-            <Fuel className="w-7 h-7 text-white" />
+          <div className="mx-auto w-14 h-14 mb-3">
+            <AppLogo size={56} rounded="rounded-2xl" />
           </div>
 
           <h1 className="text-xl font-black tracking-tight">

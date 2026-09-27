@@ -155,11 +155,9 @@ export const ManualEntryModal: React.FC<Props> = ({
       setLocation(formatted);
       setLocationSuccessMsg(`📍 Lokasi terdeteksi: ${loc.city}`);
       setTimeout(() => setLocationSuccessMsg(null), 3500);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("GPS Location error:", err);
-      alert(
-        "Tidak dapat mendeteksi lokasi otomatis. Pastikan GPS/izin lokasi di browser diizinkan."
-      );
+      alert((err as Error)?.message || "Tidak dapat mendeteksi lokasi otomatis.");
     } finally {
       setIsLocating(false);
     }

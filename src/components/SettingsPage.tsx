@@ -45,6 +45,12 @@ interface Props {
   onOpenAuth?: (mode?: "login" | "register") => void;
   onOpenProfile?: () => void;
   onSignOut?: () => void;
+  vaultCode?: string;
+  cloudStatus?: "local" | "connecting" | "synced" | "syncing" | "error" | "offline";
+  cloudError?: string | null;
+  lastSyncedAt?: string | null;
+  isSyncing?: boolean;
+  onSyncNow?: () => void;
 }
 
 export const SettingsPage: React.FC<Props> = ({
@@ -60,6 +66,12 @@ export const SettingsPage: React.FC<Props> = ({
   onOpenAuth,
   onOpenProfile,
   onSignOut,
+  vaultCode = "",
+  cloudStatus = "local",
+  cloudError = null,
+  lastSyncedAt = null,
+  isSyncing = false,
+  onSyncNow,
 }) => {
   const { theme, setTheme } = useTheme();
   const { isInstalled } = usePWAInstall();
@@ -131,6 +143,111 @@ export const SettingsPage: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Cloud Vault: akun online tersinkron multi-perangkat */}
+      <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <Database className="w-4.5 h-4.5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                Cloud Vault — Sinkron Multi-Perangkat
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {user && vaultCode
+                  ? "Akun ini tersinkron online. Login email yang sama di HP lain = data sama."
+                  : "Masuk dengan email untuk mengaktifkan vault cloud pribadi."}
+              </p>
+            </div>
+          </div>
+          {user && vaultCode ? (
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                cloudStatus === "synced"
+                  ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30"
+                  : cloudStatus === "error"
+                  ? "bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/30"
+                  : "bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/30"
+              }`}
+            >
+              {cloudStatus === "synced" ? "Tersinkron" : cloudStatus === "error" ? "Gagal sinkron" : cloudStatus === "offline" ? "Offline" : "Menyinkron…"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+              Mode Lokal
+            </span>
+          )}
+        </div>
+
+        {user && vaultCode ? (
+          <div className="space-y-2.5">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90">
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">Kode Vault Cloud Anda</div>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <span className="font-mono text-lg font-extrabold tracking-widest text-slate-900 dark:text-white">
+                  {vaultCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(vaultCode, "vault-code")}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg border border-blue-200 dark:border-blue-500/20 transition cursor-pointer"
+                >
+                  {copiedCommand === "vault-code" ? (
+                    <>
+                      <Check className="w-3 h-3 text-emerald-500" />
+                      <span className="text-emerald-500">Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3 h-3" />
+                      <span>Salin</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                Setiap email punya vault terisolasi sendiri. Teman yang login dengan email & sandi yang sama akan melihat data yang sama dan setiap edit tersinkron otomatis.
+                {lastSyncedAt && (
+                  <span className="block mt-0.5">
+                    Terakhir sinkron: {new Date(lastSyncedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                  </span>
+                )}
+              </p>
+            </div>
+            {cloudError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{cloudError}</span>
+              </div>
+            )}
+            {onSyncNow && (
+              <button
+                type="button"
+                onClick={onSyncNow}
+                disabled={isSyncing}
+                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
+              >
+                {isSyncing ? "Menyinkron…" : "Sinkronkan Sekarang"}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            Daftar/masuk dengan <b>Email & Kata Sandi</b> untuk mendapatkan <b>Kode Vault Cloud</b> pribadi. Data kendaraan, BBM, dan servis lalu tersimpan online per akun dan otomatis sama di semua HP/laptop yang login dengan akun tersebut. Tanpa login, data hanya tersimpan di perangkat ini.
+            {onOpenAuth && (
+              <button
+                type="button"
+                onClick={() => onOpenAuth("register")}
+                className="mt-2 w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Aktifkan Cloud Vault Saya
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* 0. Kesiapan & Instalasi Android APK (PWA & Native Capacitor) - Disembunyikan jika aplikasi sudah terpasang di HP */}
       {!isInstalled && (
         <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">
@@ -168,11 +285,11 @@ export const SettingsPage: React.FC<Props> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">App Name / Judul</div>
-              <div className="font-semibold text-slate-900 dark:text-white">Fuel Tracker</div>
+              <div className="font-semibold text-slate-900 dark:text-white">DigiFuel</div>
             </div>
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">Package / App ID</div>
-              <div className="font-mono font-semibold text-blue-600 dark:text-blue-400">com.fueltracker.app</div>
+              <div className="font-mono font-semibold text-blue-600 dark:text-blue-400">com.digifuel.app</div>
             </div>
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">Native Bridge Engine</div>
@@ -262,7 +379,7 @@ export const SettingsPage: React.FC<Props> = ({
             <span>Keamanan &amp; Privasi Data Lokal</span>
           </div>
           <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-            Seluruh data catatan BBM, riwayat servis berkala, dan armada kendaraan Anda tersimpan langsung pada penyimpanan lokal browser (Device Local Storage). Tidak ada sinkronisasi cloud atau spreadsheet eksternal, sehingga data Anda 100% privat dan dapat diakses cepat tanpa internet.
+            Cache lokal offline-first untuk kecepatan + <b>Cloud Vault</b> untuk sinkron multi-perangkat saat login email. Tanpa login, data 100% privat hanya di perangkat ini. Saat login, setiap edit otomatis tersinkron ke semua perangkat dengan akun yang sama.
           </p>
 
           {/* Quick Metrics */}

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "react-example",
+      "name": "digifuel",
       "dependencies": {
         "@capacitor/cli": "^8.5.2",
         "@capacitor/core": "^8.5.2",

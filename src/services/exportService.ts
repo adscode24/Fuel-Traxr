@@ -8,70 +8,116 @@ import {
   MonthlySummary,
 } from "../types";
 
+export interface ExportFile {
+  blob: Blob;
+  fileName: string;
+  mimeType: string;
+}
+
+/** Semua nilai yang masuk ke dokumen harus string/number valid — jsPDF crash jika undefined. */
+function txt(v: unknown, fallback = "-"): string {
+  if (v === null || v === undefined) return fallback;
+  const s = String(v);
+  return s.length > 0 ? s : fallback;
+}
+
+function num(v: unknown, fallback = 0): number {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function dateStr(v: unknown): string {
+  return typeof v === "string" && v.length > 0 ? v : "-";
+}
+
+function safeVehicleName(vehicle: Vehicle | null | undefined): string {
+  const name = vehicle?.name?.trim() || "Kendaraan";
+  return name.replace(/\s+/g, "_").replace(/[\\/:*?"<>|]/g, "");
+}
+
+function datedFileName(prefix: string, vehicle: Vehicle | null | undefined, ext: string): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return `${prefix}_${safeVehicleName(vehicle)}_${date}.${ext}`;
+}
+
 export function exportToExcel(
-  vehicle: Vehicle,
+  vehicle: Vehicle | null,
   records: FuelRecord[],
   services: ServiceItem[],
   monthlySummaries: MonthlySummary[],
   serviceHistory: ServiceHistoryEntry[] = []
-) {
+): ExportFile {
+  const safeVehicle: Vehicle = vehicle ?? {
+    id: "all",
+    name: "Semua Kendaraan",
+    type: "car",
+    licensePlate: "-",
+    currentOdometer: 0,
+    fuelTankCapacity: 0,
+    defaultFuelType: "-",
+  };
+  const safeRecords = Array.isArray(records) ? records : [];
+  const safeServices = Array.isArray(services) ? services : [];
+  const safeSummaries = Array.isArray(monthlySummaries) ? monthlySummaries : [];
+  const safeHistory = Array.isArray(serviceHistory) ? serviceHistory : [];
+
   const wb = XLSX.utils.book_new();
 
   // 1. Fuel Records Sheet
-  const fuelRows = records.map((r, index) => ({
+  const fuelRows = safeRecords.map((r, index) => ({
     No: index + 1,
-    Tanggal: r.date,
-    Waktu: r.time || "-",
-    Kendaraan: vehicle.name,
-    "Plat Nomor": vehicle.licensePlate,
-    "Odometer (KM)": r.odometer,
+    Tanggal: dateStr(r.date),
+    Waktu: txt(r.time),
+    Kendaraan: txt(safeVehicle.name),
+    "Plat Nomor": txt(safeVehicle.licensePlate),
+    "Odometer (KM)": num(r.odometer),
     "Jarak Tempuh (+KM)": r.distanceTraveled ?? "-",
-    "Jenis BBM": r.fuelType + (r.octaneOrGrade ? ` (${r.octaneOrGrade})` : ""),
-    "Harga / Liter (Rp)": r.pricePerLiter,
-    "Volume (Liter)": r.liters,
-    "Total Biaya (Rp)": r.totalCost,
+    "Jenis BBM": txt(r.fuelType) + (r.octaneOrGrade ? ` (${r.octaneOrGrade})` : ""),
+    "Harga / Liter (Rp)": num(r.pricePerLiter),
+    "Volume (Liter)": num(r.liters),
+    "Total Biaya (Rp)": num(r.totalCost),
     "Konsumsi (km/L)": r.fuelEfficiencyKmPerL ?? "-",
     "Biaya / KM (Rp/km)": r.costPerKm ?? "-",
-    "SPBU / Lokasi": `${r.stationName} - ${r.location}`,
+    "SPBU / Lokasi": `${txt(r.stationName)} - ${txt(r.location)}`,
     "Tangki Penuh": r.isFullTank ? "Ya" : "Tidak",
-    Catatan: r.notes || "-",
+    Catatan: txt(r.notes),
   }));
   const wsFuel = XLSX.utils.json_to_sheet(fuelRows);
   XLSX.utils.book_append_sheet(wb, wsFuel, "Riwayat BBM");
 
   // 2. Monthly Summary Sheet
-  const summaryRows = monthlySummaries.map((m) => ({
-    Bulan: m.monthName,
-    "Total Biaya (Rp)": m.totalCost,
-    "Total Liter": m.totalLiters,
-    "Total Jarak (KM)": m.totalDistance,
-    "Jumlah Pengisian": m.fillCount,
+  const summaryRows = safeSummaries.map((m) => ({
+    Bulan: txt(m.monthName, txt(m.monthKey)),
+    "Total Biaya (Rp)": num(m.totalCost),
+    "Total Liter": num(m.totalLiters),
+    "Total Jarak (KM)": num(m.totalDistance),
+    "Jumlah Pengisian": num(m.fillCount),
     "Rata-rata Konsumsi (km/L)": m.avgConsumptionKmPerL || "-",
     "Rata-rata Biaya / KM (Rp)": m.avgCostPerKm || "-",
-    "Rata-rata Harga / Liter (Rp)": m.avgPricePerLiter,
+    "Rata-rata Harga / Liter (Rp)": num(m.avgPricePerLiter),
   }));
   const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
   XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan Bulanan");
 
   // 3. Service History Sheet
-  if (serviceHistory.length > 0) {
-    const historyRows = serviceHistory.map((h, index) => ({
+  if (safeHistory.length > 0) {
+    const historyRows = safeHistory.map((h, index) => ({
       No: index + 1,
-      Tanggal: h.date,
-      "Item Servis": h.title,
-      Kategori: h.category,
-      "Odometer (KM)": h.odometer,
+      Tanggal: dateStr(h.date),
+      "Item Servis": txt(h.title, "Servis"),
+      Kategori: txt(h.category),
+      "Odometer (KM)": h.odometer ?? "-",
       "Biaya Servis (Rp)": h.cost ? h.cost : 0,
-      "Bengkel / Tempat": h.workshop || "-",
-      Catatan: h.notes || "-",
+      "Bengkel / Tempat": txt(h.workshop),
+      Catatan: txt(h.notes),
     }));
     const wsHistory = XLSX.utils.json_to_sheet(historyRows);
     XLSX.utils.book_append_sheet(wb, wsHistory, "Riwayat Servis Selesai");
   }
 
   // 4. Service Schedule Sheet
-  const serviceRows = services.map((s, index) => {
-    const kmRemaining = s.nextServiceOdometer - vehicle.currentOdometer;
+  const serviceRows = safeServices.map((s, index) => {
+    const kmRemaining = num(s.nextServiceOdometer) - num(safeVehicle.currentOdometer);
     let statusText = "Aman";
     if (kmRemaining <= 0) {
       statusText = "JATUH TEMPO (Terlewat!)";
@@ -81,31 +127,49 @@ export function exportToExcel(
 
     return {
       No: index + 1,
-      "Item Servis": s.title,
-      Kategori: s.category,
-      "Interval (KM)": s.intervalKm,
-      "Servis Terakhir (KM)": s.lastServiceOdometer,
-      "Servis Berikutnya (KM)": s.nextServiceOdometer,
-      "Odometer Saat Ini (KM)": vehicle.currentOdometer,
+      "Item Servis": txt(s.title, "Servis"),
+      Kategori: txt(s.category),
+      "Interval (KM)": num(s.intervalKm),
+      "Servis Terakhir (KM)": num(s.lastServiceOdometer),
+      "Servis Berikutnya (KM)": num(s.nextServiceOdometer),
+      "Odometer Saat Ini (KM)": num(safeVehicle.currentOdometer),
       "Sisa Jarak (KM)": kmRemaining,
       Status: statusText,
-      Catatan: s.notes || "-",
+      Catatan: txt(s.notes),
     };
   });
   const wsService = XLSX.utils.json_to_sheet(serviceRows);
   XLSX.utils.book_append_sheet(wb, wsService, "Jadwal Servis");
 
-  const fileName = `Fuel_Tracker_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+  const fileName = datedFileName("DigiFuel", safeVehicle, "xlsx");
+  const bytes = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  return { blob, fileName, mimeType: blob.type };
 }
 
 export function exportToPDF(
-  vehicle: Vehicle,
+  vehicle: Vehicle | null,
   records: FuelRecord[],
   services: ServiceItem[],
   monthlySummaries: MonthlySummary[],
   serviceHistory: ServiceHistoryEntry[] = []
-) {
+): ExportFile {
+  void monthlySummaries;
+  const safeVehicle: Vehicle = vehicle ?? {
+    id: "all",
+    name: "Semua Kendaraan",
+    type: "car",
+    licensePlate: "-",
+    currentOdometer: 0,
+    fuelTankCapacity: 0,
+    defaultFuelType: "-",
+  };
+  const safeRecords = Array.isArray(records) ? records : [];
+  const safeServices = Array.isArray(services) ? services : [];
+  const safeHistory = Array.isArray(serviceHistory) ? serviceHistory : [];
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -113,7 +177,16 @@ export function exportToPDF(
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const maxY = pageHeight - 15;
   let y = 16;
+
+  const ensureSpace = (needed: number) => {
+    if (y + needed > maxY) {
+      doc.addPage();
+      y = 20;
+    }
+  };
 
   // Header Banner
   doc.setFillColor(22, 28, 43); // Dark navy
@@ -122,13 +195,13 @@ export function exportToPDF(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(255, 255, 255);
-  doc.text("FUEL TRACKER - LAPORAN KENDARAAN", 14, 12);
+  doc.text("DIGIFUEL - LAPORAN KENDARAAN", 14, 12);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(190, 205, 230);
   doc.text(
-    `Kendaraan: ${vehicle.name} (${vehicle.licensePlate}) | Odometer: ${vehicle.currentOdometer.toLocaleString("id-ID")} KM`,
+    `Kendaraan: ${txt(safeVehicle.name)} (${txt(safeVehicle.licensePlate)}) | Odometer: ${num(safeVehicle.currentOdometer).toLocaleString("id-ID")} KM`,
     14,
     19
   );
@@ -137,10 +210,10 @@ export function exportToPDF(
   y = 35;
 
   // Summary Metrics Card
-  const totalSpend = records.reduce((acc, r) => acc + r.totalCost, 0);
-  const totalServiceSpend = serviceHistory.reduce((acc, h) => acc + (h.cost || 0), 0);
-  const totalLiters = records.reduce((acc, r) => acc + r.liters, 0);
-  const totalDist = records.reduce((acc, r) => acc + (r.distanceTraveled || 0), 0);
+  const totalSpend = safeRecords.reduce((acc, r) => acc + num(r.totalCost), 0);
+  const totalServiceSpend = safeHistory.reduce((acc, h) => acc + num(h.cost), 0);
+  const totalLiters = safeRecords.reduce((acc, r) => acc + num(r.liters), 0);
+  const totalDist = safeRecords.reduce((acc, r) => acc + num(r.distanceTraveled), 0);
   const avgEfficiency =
     totalLiters > 0 && totalDist > 0 ? (totalDist / totalLiters).toFixed(2) : "-";
 
@@ -192,20 +265,26 @@ export function exportToPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(50, 55, 70);
 
-  records.slice(0, 10).forEach((r, idx) => {
+  const shownRecords = safeRecords.slice(0, 30);
+  if (shownRecords.length === 0) {
+    doc.text("Belum ada catatan pengisian pada filter ini.", 16, y + 4);
+    y += 5.5;
+  }
+  shownRecords.forEach((r, idx) => {
+    ensureSpace(5.5);
     if (idx % 2 === 1) {
       doc.setFillColor(250, 251, 253);
       doc.rect(14, y, pageWidth - 28, 5.5, "F");
     }
 
-    doc.text(r.date, 16, y + 4);
-    doc.text(`${r.odometer.toLocaleString("id-ID")} km`, 38, y + 4);
+    doc.text(dateStr(r.date), 16, y + 4);
+    doc.text(`${num(r.odometer).toLocaleString("id-ID")} km`, 38, y + 4);
     doc.text(r.distanceTraveled ? `+${r.distanceTraveled} km` : "-", 58, y + 4);
-    doc.text(r.fuelType.substring(0, 12), 76, y + 4);
-    doc.text(`${r.liters} L`, 102, y + 4);
-    doc.text(`Rp ${r.totalCost.toLocaleString("id-ID")}`, 120, y + 4);
+    doc.text(txt(r.fuelType, "BBM").substring(0, 12), 76, y + 4);
+    doc.text(`${num(r.liters)} L`, 102, y + 4);
+    doc.text(`Rp ${num(r.totalCost).toLocaleString("id-ID")}`, 120, y + 4);
     doc.text(r.fuelEfficiencyKmPerL ? `${r.fuelEfficiencyKmPerL}` : "-", 148, y + 4);
-    const loc = `${r.stationName}`.substring(0, 18);
+    const loc = txt(r.stationName, "-").substring(0, 18);
     doc.text(loc, 164, y + 4);
 
     y += 5.5;
@@ -214,12 +293,8 @@ export function exportToPDF(
   y += 7;
 
   // Section 2: Riwayat Servis yang Telah Dilakukan
-  if (serviceHistory.length > 0) {
-    if (y > 230) {
-      doc.addPage();
-      y = 20;
-    }
-
+  if (safeHistory.length > 0) {
+    ensureSpace(20);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(20, 25, 40);
@@ -243,17 +318,18 @@ export function exportToPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(50, 55, 70);
 
-    serviceHistory.slice(0, 8).forEach((h, idx) => {
+    safeHistory.slice(0, 20).forEach((h, idx) => {
+      ensureSpace(5.5);
       if (idx % 2 === 1) {
         doc.setFillColor(250, 251, 253);
         doc.rect(14, y, pageWidth - 28, 5.5, "F");
       }
 
-      doc.text(h.date, 16, y + 4);
-      doc.text(h.title.substring(0, 36), 42, y + 4);
-      doc.text(`${h.odometer.toLocaleString("id-ID")} km`, 110, y + 4);
-      doc.text((h.workshop || "-").substring(0, 18), 135, y + 4);
-      doc.text(h.cost ? `Rp ${h.cost.toLocaleString("id-ID")}` : "-", 170, y + 4);
+      doc.text(dateStr(h.date), 16, y + 4);
+      doc.text(txt(h.title, "Servis").substring(0, 36), 42, y + 4);
+      doc.text(h.odometer !== undefined && h.odometer !== null ? `${num(h.odometer).toLocaleString("id-ID")} km` : "-", 110, y + 4);
+      doc.text(txt(h.workshop).substring(0, 18), 135, y + 4);
+      doc.text(h.cost ? `Rp ${num(h.cost).toLocaleString("id-ID")}` : "-", 170, y + 4);
 
       y += 5.5;
     });
@@ -262,11 +338,7 @@ export function exportToPDF(
   }
 
   // Section 3: Jadwal Servis Berkala
-  if (y > 230) {
-    doc.addPage();
-    y = 20;
-  }
-
+  ensureSpace(20);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(20, 25, 40);
@@ -290,18 +362,24 @@ export function exportToPDF(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
 
-  services.forEach((s, idx) => {
-    const remaining = s.nextServiceOdometer - vehicle.currentOdometer;
+  if (safeServices.length === 0) {
+    doc.setTextColor(50, 55, 70);
+    doc.text("Belum ada jadwal servis.", 16, y + 4);
+    y += 5.5;
+  }
+  safeServices.forEach((s, idx) => {
+    ensureSpace(5.5);
+    const remaining = num(s.nextServiceOdometer) - num(safeVehicle.currentOdometer);
     if (idx % 2 === 1) {
       doc.setFillColor(250, 251, 253);
       doc.rect(14, y, pageWidth - 28, 5.5, "F");
     }
 
     doc.setTextColor(40, 45, 60);
-    doc.text(s.title.substring(0, 32), 16, y + 4);
-    doc.text(`${s.intervalKm.toLocaleString("id-ID")} km`, 75, y + 4);
-    doc.text(`${s.lastServiceOdometer.toLocaleString("id-ID")} km`, 98, y + 4);
-    doc.text(`${s.nextServiceOdometer.toLocaleString("id-ID")} km`, 130, y + 4);
+    doc.text(txt(s.title, "Servis").substring(0, 32), 16, y + 4);
+    doc.text(`${num(s.intervalKm).toLocaleString("id-ID")} km`, 75, y + 4);
+    doc.text(`${num(s.lastServiceOdometer).toLocaleString("id-ID")} km`, 98, y + 4);
+    doc.text(`${num(s.nextServiceOdometer).toLocaleString("id-ID")} km`, 130, y + 4);
 
     if (remaining <= 0) {
       doc.setTextColor(220, 38, 38);
@@ -317,7 +395,7 @@ export function exportToPDF(
     y += 5.5;
   });
 
-  const fileName = `Fuel_Tracker_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
-  doc.save(fileName);
+  const fileName = datedFileName("DigiFuel", safeVehicle, "pdf");
+  const blob = doc.output("blob");
+  return { blob, fileName, mimeType: "application/pdf" };
 }
-

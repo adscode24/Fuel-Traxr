@@ -26,6 +26,7 @@ import {
 } from "../types";
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
 import { exportToExcel, exportToPDF } from "../services/exportService";
+import { downloadExportFile } from "../services/fileDownload";
 import { calculateMonthlySummaries } from "../services/storage";
 
 interface Props {
@@ -53,6 +54,8 @@ export const ReportPage: React.FC<Props> = ({
   );
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [exportMsg, setExportMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [exportBusy, setExportBusy] = useState<"excel" | "pdf" | null>(null);
 
   // Format currency
   const formatRupiah = (val: number, withDecimals = false) => {
@@ -184,31 +187,63 @@ export const ReportPage: React.FC<Props> = ({
     totalDistance > 0 ? Math.round(totalFuelCost / totalDistance) : null;
 
   // Export handlers with current filtered data
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
+    if (exportBusy) return;
+    setExportBusy("excel");
+    setExportMsg(null);
     try {
-      exportToExcel(
+      const file = exportToExcel(
         selectedVehicle,
         filteredRecords,
         services,
         dynamicMonthlySummaries,
         filteredHistory
       );
-    } catch (err: any) {
-      alert("Gagal mengekspor Excel: " + err.message);
+      const how = await downloadExportFile(file);
+      setExportMsg({
+        type: "ok",
+        text:
+          how === "shared"
+            ? "Excel siap — pilih tujuan di dialog Share untuk menyimpan."
+            : `Excel terunduh: ${file.fileName}`,
+      });
+    } catch (err: unknown) {
+      setExportMsg({
+        type: "err",
+        text: "Gagal mengekspor Excel: " + ((err as Error)?.message || "kesalahan tidak dikenal"),
+      });
+    } finally {
+      setExportBusy(null);
     }
   };
 
-  const handleExportPdf = () => {
+  const handleExportPdf = async () => {
+    if (exportBusy) return;
+    setExportBusy("pdf");
+    setExportMsg(null);
     try {
-      exportToPDF(
+      const file = exportToPDF(
         selectedVehicle,
         filteredRecords,
         services,
         dynamicMonthlySummaries,
         filteredHistory
       );
-    } catch (err: any) {
-      alert("Gagal mengekspor PDF: " + err.message);
+      const how = await downloadExportFile(file);
+      setExportMsg({
+        type: "ok",
+        text:
+          how === "shared"
+            ? "PDF siap — pilih tujuan di dialog Share untuk menyimpan."
+            : `PDF terunduh: ${file.fileName}`,
+      });
+    } catch (err: unknown) {
+      setExportMsg({
+        type: "err",
+        text: "Gagal mengekspor PDF: " + ((err as Error)?.message || "kesalahan tidak dikenal"),
+      });
+    } finally {
+      setExportBusy(null);
     }
   };
 
@@ -399,21 +434,23 @@ export const ReportPage: React.FC<Props> = ({
             {/* Export Excel Button */}
             <button
               onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition active:scale-95"
+              disabled={exportBusy !== null}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition active:scale-95 disabled:opacity-60"
               title="Unduh file Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Ekspor Excel (.xlsx)</span>
+              <span>{exportBusy === "excel" ? "Membuat Excel…" : "Ekspor Excel (.xlsx)"}</span>
             </button>
 
             {/* Export PDF Button */}
             <button
               onClick={handleExportPdf}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition active:scale-95"
+              disabled={exportBusy !== null}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow transition active:scale-95 disabled:opacity-60"
               title="Unduh dokumen PDF"
             >
               <FileDown className="w-4 h-4" />
-              <span>Ekspor PDF</span>
+              <span>{exportBusy === "pdf" ? "Membuat PDF…" : "Ekspor PDF"}</span>
             </button>
 
             {/* Direct Print Button */}
@@ -427,6 +464,18 @@ export const ReportPage: React.FC<Props> = ({
             </button>
           </div>
         </div>
+        {exportMsg && (
+          <div
+            className={`mt-3 p-2.5 rounded-xl text-xs flex items-start gap-2 ${
+              exportMsg.type === "ok"
+                ? "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+                : "bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300"
+            }`}
+          >
+            <Info className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>{exportMsg.text}</span>
+          </div>
+        )}
       </div>
 
       {/* KPI Metrics 4-Grid */}

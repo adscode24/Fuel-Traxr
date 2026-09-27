@@ -346,7 +346,7 @@ export function exportDeviceBackup(
   serviceHistory: ServiceHistoryEntry[]
 ): void {
   const payload: DeviceBackupPayload = {
-    app: "Fuel Tracker",
+    app: "DigiFuel",
     version: 2,
     exportedAt: new Date().toISOString(),
     storageType: "device_local",
@@ -366,7 +366,7 @@ export function exportDeviceBackup(
 
   const link = document.createElement("a");
   link.href = url;
-  link.download = `fuel_tracker_backup_${dateStr}.json`;
+  link.download = `digifuel_backup_${dateStr}.json`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

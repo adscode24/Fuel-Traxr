@@ -1,3 +1,6 @@
+import { Geolocation } from "@capacitor/geolocation";
+import { isNativePlatform } from "./firebase";
+
 export interface UserLocationInfo {
   city: string;
   district?: string;
@@ -376,20 +379,22 @@ export function setAskedLocationPermission() {
 }
 
 /**
- * Reverse geocode latitude and longitude to readable Indonesian City / District
+ * Reverse geocode latitude and longitude to readable Indonesian City / District.
+ * Berlapis: Nominatim OSM -> BigDataCloud (tanpa API key) -> perkiraan batas koordinat.
  */
 async function reverseGeocodeCoords(
   lat: number,
   lon: number
 ): Promise<{ city: string; district?: string; province?: string; formattedAddress?: string }> {
+  // 1. OpenStreetMap Nominatim
   try {
-    // Try OpenStreetMap Nominatim with quick 3.5s timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=14&addressdetails=1`;
     const res = await fetch(url, {
       headers: {
+        "Accept": "application/json",
         "Accept-Language": "id, en",
       },
       signal: controller.signal,
@@ -423,33 +428,92 @@ async function reverseGeocodeCoords(
       };
     }
   } catch (err) {
-    console.warn("Reverse geocoding fetch failed, falling back to coordinate bounds:", err);
+    console.warn("Nominatim reverse geocoding failed, trying BigDataCloud:", err);
   }
 
-  // Graceful coordinate bounds approximation for Indonesia's key regions
+  // 2. BigDataCloud free client-side reverse geocode (no key, CORS enabled)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=id`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      const city = data.city || data.locality || data.principalSubdivision || "Indonesia";
+      const province = data.principalSubdivision;
+      return {
+        city,
+        district: data.locality && data.locality !== city ? data.locality : undefined,
+        province,
+        formattedAddress: [data.locality, city, province].filter(Boolean).join(", ") || city,
+      };
+    }
+  } catch (err) {
+    console.warn("BigDataCloud reverse geocoding failed, falling back to coordinate bounds:", err);
+  }
+
+  // 3. Graceful coordinate bounds approximation for Indonesia's key regions
   return estimateCityFromCoords(lat, lon);
 }
 
+function inBounds(lat: number, lon: number, latMin: number, latMax: number, lonMin: number, lonMax: number) {
+  return lat >= latMin && lat <= latMax && lon >= lonMin && lon <= lonMax;
+}
+
 function estimateCityFromCoords(lat: number, lon: number) {
-  // Garut area
-  if (lat >= -7.4 && lat <= -7.0 && lon >= 107.7 && lon <= 108.1) {
-    return { city: "Garut", province: "Jawa Barat", formattedAddress: "Garut, Jawa Barat" };
+  // Cek kotak kecil/spesifik dulu sebelum kotak besar agar tidak tertelan tetangga.
+  // Tangerang
+  if (inBounds(lat, lon, -6.4, -6.1, 106.5, 106.75)) {
+    return { city: "Tangerang", province: "Banten", formattedAddress: "Tangerang, Banten" };
+  }
+  // Depok
+  if (inBounds(lat, lon, -6.5, -6.3, 106.7, 106.95)) {
+    return { city: "Depok", province: "Jawa Barat", formattedAddress: "Depok, Jawa Barat" };
+  }
+  // Bekasi
+  if (inBounds(lat, lon, -6.3, -6.1, 106.9, 107.1)) {
+    return { city: "Bekasi", province: "Jawa Barat", formattedAddress: "Bekasi, Jawa Barat" };
   }
   // Bogor / Gunung Putri area
-  if (lat >= -6.8 && lat <= -6.4 && lon >= 106.7 && lon <= 107.1) {
+  if (inBounds(lat, lon, -6.8, -6.4, 106.7, 107.1)) {
     return { city: "Bogor", province: "Jawa Barat", formattedAddress: "Bogor, Jawa Barat" };
   }
   // Jakarta Area
-  if (lat >= -6.4 && lat <= -6.0 && lon >= 106.6 && lon <= 107.0) {
+  if (inBounds(lat, lon, -6.4, -6.0, 106.6, 107.0)) {
     return { city: "Jakarta", province: "DKI Jakarta", formattedAddress: "Jakarta" };
   }
+  // Garut area
+  if (inBounds(lat, lon, -7.4, -7.0, 107.7, 108.1)) {
+    return { city: "Garut", province: "Jawa Barat", formattedAddress: "Garut, Jawa Barat" };
+  }
   // Bandung Area
-  if (lat >= -7.1 && lat <= -6.8 && lon >= 107.4 && lon <= 107.8) {
+  if (inBounds(lat, lon, -7.1, -6.8, 107.4, 107.9)) {
     return { city: "Bandung", province: "Jawa Barat", formattedAddress: "Bandung, Jawa Barat" };
   }
+  // Semarang
+  if (inBounds(lat, lon, -7.1, -6.9, 110.2, 110.6)) {
+    return { city: "Semarang", province: "Jawa Tengah", formattedAddress: "Semarang, Jawa Tengah" };
+  }
+  // Yogyakarta
+  if (inBounds(lat, lon, -7.9, -7.6, 110.2, 110.6)) {
+    return { city: "Yogyakarta", province: "DI Yogyakarta", formattedAddress: "Yogyakarta, DI Yogyakarta" };
+  }
   // Surabaya Area
-  if (lat >= -7.4 && lat <= -7.1 && lon >= 107.2 && lon <= 112.9) {
+  if (inBounds(lat, lon, -7.4, -7.1, 112.5, 112.9)) {
     return { city: "Surabaya", province: "Jawa Timur", formattedAddress: "Surabaya, Jawa Timur" };
+  }
+  // Medan
+  if (inBounds(lat, lon, 3.4, 3.8, 98.5, 98.9)) {
+    return { city: "Medan", province: "Sumatera Utara", formattedAddress: "Medan, Sumatera Utara" };
+  }
+  // Makassar
+  if (inBounds(lat, lon, -5.3, -4.9, 119.3, 119.7)) {
+    return { city: "Makassar", province: "Sulawesi Selatan", formattedAddress: "Makassar, Sulawesi Selatan" };
+  }
+  // Denpasar / Badung
+  if (inBounds(lat, lon, -8.8, -8.5, 115.0, 115.4)) {
+    return { city: "Denpasar", province: "Bali", formattedAddress: "Denpasar, Bali" };
   }
 
   return {
@@ -459,10 +523,29 @@ function estimateCityFromCoords(lat: number, lon: number) {
 }
 
 /**
- * Requests GPS permission and reads current user coordinates + city
+ * Ambil koordinat perangkat.
+ * - Android/iOS native (Capacitor): lewat plugin @capacitor/geolocation agar
+ *   izin runtime Android diminta resmi + manifest permission ikut ter-merge saat build.
+ * - Web / PWA: lewat navigator.geolocation browser.
  */
-export async function requestAndDetectUserLocation(): Promise<UserLocationInfo> {
-  setAskedLocationPermission();
+async function getDeviceCoordinates(): Promise<{ latitude: number; longitude: number }> {
+  if (isNativePlatform()) {
+    try {
+      try {
+        await Geolocation.requestPermissions();
+      } catch {
+        // Lanjut — getCurrentPosition akan memberi pesan error yang jelas bila ditolak.
+      }
+      const pos = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000,
+      });
+      return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+    } catch (err: unknown) {
+      throw new Error(mapNativeLocationError(err));
+    }
+  }
 
   if (!navigator.geolocation) {
     throw new Error("Browser Anda tidak mendukung deteksi lokasi Geolocation.");
@@ -470,49 +553,74 @@ export async function requestAndDetectUserLocation(): Promise<UserLocationInfo> 
 
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        try {
-          const geo = await reverseGeocodeCoords(latitude, longitude);
-          const locationInfo: UserLocationInfo = {
-            city: geo.city,
-            district: geo.district,
-            province: geo.province,
-            latitude,
-            longitude,
-            formattedAddress: geo.formattedAddress || geo.city,
-            source: "gps",
-          };
-          setStoredUserLocation(locationInfo);
-          resolve(locationInfo);
-        } catch {
-          const fallbackInfo: UserLocationInfo = {
-            city: "Indonesia",
-            latitude,
-            longitude,
-            formattedAddress: "Indonesia",
-            source: "gps",
-          };
-          setStoredUserLocation(fallbackInfo);
-          resolve(fallbackInfo);
-        }
-      },
-      (err) => {
-        let msg = "Izin akses lokasi ditolak atau tidak tersedia.";
-        if (err.code === err.PERMISSION_DENIED) {
-          msg = "Akses lokasi ditolak. Anda dapat mengaktifkannya di pengaturan browser.";
-        } else if (err.code === err.TIMEOUT) {
-          msg = "Waktu membaca lokasi habis (timeout).";
-        }
-        reject(new Error(msg));
-      },
+      (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      (err) => reject(new Error(mapWebLocationError(err))),
       {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000,
         maximumAge: 60000,
       }
     );
   });
+}
+
+function mapNativeLocationError(err: unknown): string {
+  const msg = (err as Error)?.message || "";
+  if (/denied|permission|not authorized/i.test(msg)) {
+    return "Akses lokasi ditolak. Buka Pengaturan HP → Aplikasi → DigiFuel → Izin → aktifkan Lokasi, lalu coba lagi.";
+  }
+  if (/timeout|timed out/i.test(msg)) {
+    return "Waktu membaca lokasi habis. Pastikan GPS aktif dan Anda di area terbuka, lalu coba lagi.";
+  }
+  if (/unavailable|disabled|location/i.test(msg)) {
+    return "Layanan lokasi tidak tersedia. Aktifkan GPS/Lokasi di HP Anda lalu coba lagi.";
+  }
+  return msg || "Gagal membaca lokasi perangkat.";
+}
+
+function mapWebLocationError(err: GeolocationPositionError): string {
+  if (err.code === err.PERMISSION_DENIED) {
+    return "Akses lokasi ditolak. Klik ikon gembok di address bar browser → izinkan Lokasi, lalu coba lagi.";
+  } else if (err.code === err.POSITION_UNAVAILABLE) {
+    return "Posisi tidak tersedia. Pastikan GPS/layanan lokasi perangkat aktif lalu coba lagi.";
+  } else if (err.code === err.TIMEOUT) {
+    return "Waktu membaca lokasi habis (timeout). Coba lagi dalam beberapa detik.";
+  }
+  return "Izin akses lokasi ditolak atau tidak tersedia.";
+}
+
+/**
+ * Requests location permission and reads current user coordinates + city.
+ * Hanya menandai "sudah diminta" bila BERHASIL — agar banner bisa tampil lagi
+ * dan pengguna bisa mencoba ulang bila gagal.
+ */
+export async function requestAndDetectUserLocation(): Promise<UserLocationInfo> {
+  const { latitude, longitude } = await getDeviceCoordinates();
+
+  let geo = { city: "Indonesia", formattedAddress: "Indonesia" } as {
+    city: string;
+    district?: string;
+    province?: string;
+    formattedAddress?: string;
+  };
+  try {
+    geo = await reverseGeocodeCoords(latitude, longitude);
+  } catch {
+    geo = estimateCityFromCoords(latitude, longitude);
+  }
+
+  const locationInfo: UserLocationInfo = {
+    city: geo.city,
+    district: geo.district,
+    province: geo.province,
+    latitude,
+    longitude,
+    formattedAddress: geo.formattedAddress || geo.city,
+    source: "gps",
+  };
+  setStoredUserLocation(locationInfo);
+  setAskedLocationPermission();
+  return locationInfo;
 }
 
 /**

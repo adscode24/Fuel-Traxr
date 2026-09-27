@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.fueltracker.app',
-  appName: 'Fuel Tracker',
+  appId: 'com.digifuel.app',
+  appName: 'DigiFuel',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

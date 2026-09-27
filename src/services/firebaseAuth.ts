@@ -1,6 +1,4 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
 import {
-  getAuth,
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -11,11 +9,10 @@ import {
   updateProfile,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import firebaseConfig from "../../firebase-applet-config.json";
+import { auth, isNativePlatform } from "./firebase";
 
-// Initialize Firebase App safely (singleton)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
+export { auth };
+export { isNativePlatform };
 
 const provider = new GoogleAuthProvider();
 // Google Drive & Google Spreadsheets scopes for syncing application files & sheets
@@ -211,9 +208,23 @@ export const initAuth = (
 };
 
 /**
+ * Error Firebase yang berarti perangkat offline / tidak bisa menjangkau server.
+ * HANYA dalam kasus ini akun lokal/offline boleh dipakai — selain itu
+ * Firebase adalah satu-satunya kebenaran agar 1 email berlaku di semua perangkat.
+ */
+function isOfflineAuthError(err: unknown): boolean {
+  const code = (err as { code?: string })?.code || "";
+  if (code === "auth/network-request-failed") return true;
+  if (!navigator.onLine) return true;
+  return false;
+}
+
+/**
  * Register a new user with Name, Email, Password, and optional Phone.
- * Tries Firebase Auth first, with graceful local fallback if Email/Password provider
- * is not configured in Firebase console or encounters network/configuration issues.
+ * SELALU via Firebase Auth agar akun langsung berlaku di semua platform
+ * (website, web-mobile, Android native) tanpa perlu daftar ulang.
+ * Tidak ada fallback akun lokal saat online — akun lokal diam-diam adalah
+ * penyebab "sudah daftar di web tapi harus daftar lagi di HP".
  */
 export const registerWithEmail = async (
   name: string,
@@ -243,13 +254,12 @@ export const registerWithEmail = async (
       }
     }
 
-    // Also record into local registered list with password for fast reliable fallback
+    // Mirror (tanpa menjadikan ini sumber login): untuk sesi offline di perangkat ini saja
     const users = getRegisteredLocalUsers().filter((u) => u.email !== cleanEmail);
     users.push({
       uid: cred.user.uid,
       name: cleanName,
       email: cleanEmail,
-      password: pass,
       phone: phone?.trim(),
       createdAt: new Date().toISOString(),
     });
@@ -257,49 +267,38 @@ export const registerWithEmail = async (
     setActiveLocalUser(null);
 
     return cred.user;
-  } catch (firebaseErr: any) {
-    console.warn("Firebase email registration warning:", firebaseErr?.code, firebaseErr?.message);
+  } catch (firebaseErr: unknown) {
+    console.warn("Firebase email registration warning:", (firebaseErr as { code?: string })?.code, (firebaseErr as Error)?.message);
+    const code = (firebaseErr as { code?: string })?.code || "";
 
     // If already in use or invalid credentials in Firebase, provide immediate feedback
-    if (firebaseErr?.code === "auth/email-already-in-use") {
-      throw new Error("Alamat email ini sudah terdaftar di sistem. Silakan masuk.");
+    if (code === "auth/email-already-in-use") {
+      throw new Error("Alamat email ini sudah terdaftar. Langsung Masuk saja — 1 akun berlaku di semua perangkat (web & Android).");
     }
-    if (firebaseErr?.code === "auth/weak-password") {
+    if (code === "auth/weak-password") {
       throw new Error("Kata sandi terlalu lemah. Gunakan minimal 6 karakter.");
     }
-    if (firebaseErr?.code === "auth/invalid-email") {
+    if (code === "auth/invalid-email") {
       throw new Error("Format alamat email tidak valid.");
     }
-
-    // Fallback to local storage authentication (e.g. if Firebase Auth provider not active or network error)
-    const users = getRegisteredLocalUsers();
-    const existing = users.find((u) => u.email === cleanEmail);
-    if (existing) {
-      throw new Error("Alamat email ini sudah terdaftar. Silakan masuk.");
+    if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") {
+      throw new Error(
+        "Pendaftaran cloud belum aktif di server. Aktifkan provider Email/Password di Firebase Console → Authentication (lihat FIRESTORE_SETUP.md). Sementara Anda bisa lanjut sebagai Tamu."
+      );
+    }
+    if (isOfflineAuthError(firebaseErr)) {
+      throw new Error("Anda sedang offline. Pendaftaran akun baru butuh internet sekali saja — setelah itu bisa login offline di perangkat ini.");
     }
 
-    const newLocalUser: LocalUserRecord = {
-      uid: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-      name: cleanName,
-      email: cleanEmail,
-      password: pass,
-      phone: phone?.trim(),
-      createdAt: new Date().toISOString(),
-    };
-
-    users.push(newLocalUser);
-    saveRegisteredLocalUsers(users);
-    setActiveLocalUser(newLocalUser);
-
-    const synthetic = createSyntheticUser(newLocalUser);
-    notifyAuthListeners(synthetic, null);
-    return synthetic;
+    throw new Error((firebaseErr as Error)?.message || "Pendaftaran gagal. Silakan coba beberapa saat lagi.");
   }
 };
 
 /**
  * Login with Email and Password.
- * Tries Firebase Auth first, falls back to local user store.
+ * SELALU via Firebase Auth agar data cloud yang sama terbuka di semua perangkat.
+ * Sesi offline hanya diizinkan bila akun Firebase tersebut PERNAH login
+ * di perangkat ini sebelumnya (cache cermin) dan perangkat sedang offline.
  */
 export const loginWithEmail = async (email: string, pass: string): Promise<User> => {
   const cleanEmail = email.trim().toLowerCase();
@@ -312,64 +311,60 @@ export const loginWithEmail = async (email: string, pass: string): Promise<User>
     const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
     setActiveLocalUser(null);
 
-    // Keep local records up to date with this user
+    // Mirror (tanpa menyimpan password): untuk sesi offline di perangkat ini saja
     const users = getRegisteredLocalUsers();
     const existing = users.find((u) => u.email === cleanEmail);
     if (existing) {
-      existing.password = pass;
+      existing.uid = cred.user.uid;
       existing.name = cred.user.displayName || existing.name;
     } else {
       users.push({
         uid: cred.user.uid,
         name: cred.user.displayName || cleanEmail.split("@")[0],
         email: cleanEmail,
-        password: pass,
         createdAt: new Date().toISOString(),
       });
     }
     saveRegisteredLocalUsers(users);
 
     return cred.user;
-  } catch (firebaseErr: any) {
-    console.warn("Firebase email login warning:", firebaseErr?.code, firebaseErr?.message);
+  } catch (firebaseErr: unknown) {
+    console.warn("Firebase email login warning:", (firebaseErr as { code?: string })?.code, (firebaseErr as Error)?.message);
+    const code = (firebaseErr as { code?: string })?.code || "";
 
-    // Check in local registered users
-    const users = getRegisteredLocalUsers();
-    const match = users.find((u) => u.email.toLowerCase() === cleanEmail);
-
-    if (match) {
-      if (match.password && match.password !== pass) {
-        throw new Error("Kata sandi yang Anda masukkan salah.");
+    // Offline + pernah login di perangkat ini -> sesi offline dari cache
+    if (isOfflineAuthError(firebaseErr)) {
+      const users = getRegisteredLocalUsers();
+      const match = users.find(
+        (u) => u.email.toLowerCase() === cleanEmail && !u.uid.startsWith("usr_")
+      );
+      if (match) {
+        setActiveLocalUser(match);
+        const synthetic = createSyntheticUser(match);
+        notifyAuthListeners(synthetic, null);
+        return synthetic;
       }
-      setActiveLocalUser(match);
-      const synthetic = createSyntheticUser(match);
-      notifyAuthListeners(synthetic, null);
-      return synthetic;
+      throw new Error("Anda offline dan akun ini belum pernah login di perangkat ini. Hubungkan internet untuk masuk pertama kali.");
     }
 
     // Map common Firebase errors to helpful Indonesian messages
-    if (
-      firebaseErr?.code === "auth/invalid-credential" ||
-      firebaseErr?.code === "auth/wrong-password"
-    ) {
+    if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
       throw new Error("Email atau kata sandi yang Anda masukkan salah.");
-    } else if (firebaseErr?.code === "auth/user-not-found") {
-      throw new Error("Akun dengan email ini tidak ditemukan. Silakan lakukan pendaftaran.");
-    } else if (firebaseErr?.code === "auth/too-many-requests") {
+    } else if (code === "auth/user-not-found") {
+      throw new Error("Akun dengan email ini tidak ditemukan. Silakan lakukan pendaftaran dulu — cukup sekali, berlaku di semua perangkat.");
+    } else if (code === "auth/too-many-requests") {
       throw new Error("Terlalu banyak percobaan masuk gagal. Coba lagi dalam beberapa menit.");
-    } else if (firebaseErr?.code === "auth/invalid-email") {
+    } else if (code === "auth/invalid-email") {
       throw new Error("Alamat email tidak valid.");
     }
 
-    // If Firebase disallowed or network error, and no local match
-    if (
-      firebaseErr?.code === "auth/operation-not-allowed" ||
-      firebaseErr?.code === "auth/configuration-not-found"
-    ) {
-      throw new Error("Akun dengan email ini belum terdaftar. Silakan pilih tab 'Pendaftaran'.");
+    if (code === "auth/operation-not-allowed" || code === "auth/configuration-not-found") {
+      throw new Error(
+        "Login cloud belum aktif di server. Aktifkan provider Email/Password di Firebase Console → Authentication (lihat FIRESTORE_SETUP.md)."
+      );
     }
 
-    throw new Error(firebaseErr?.message || "Gagal masuk. Periksa kembali email dan kata sandi Anda.");
+    throw new Error((firebaseErr as Error)?.message || "Gagal masuk. Periksa kembali email dan kata sandi Anda.");
   }
 };
 
@@ -416,6 +411,13 @@ export const sendResetPassword = async (email: string): Promise<void> => {
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  // signInWithPopup tidak didukung di WebView native Capacitor (Android/iOS).
+  // Login email + password tetap berfungsi penuh di native.
+  if (isNativePlatform()) {
+    throw new Error(
+      "Login Google tidak tersedia di aplikasi native. Silakan masuk dengan Email & Kata Sandi — data cloud Anda tetap tersinkron."
+    );
+  }
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);

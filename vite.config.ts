@@ -21,10 +21,10 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'Fuel Tracker',
-          short_name: 'Fuel Tracker',
+          name: 'DigiFuel',
+          short_name: 'DigiFuel',
           description:
-            'Aplikasi Fuel Tracker: pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.',
+            'Aplikasi DigiFuel: pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.',
           theme_color: '#111724',
           background_color: '#0c1017',
           display: 'standalone',
@@ -55,6 +55,9 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+          // Bundle >2MB karena recharts+xlsx+jspdf+firebase; naikkan limit agar `vite build` (dipakai CI APK) tidak gagal.
+          // Di Capacitor native, dist disajikan lokal sehingga precache SW tidak kritis.
+          maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

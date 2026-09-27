@@ -18,6 +18,7 @@ export const LocationPermissionBanner: React.FC<Props> = ({
 }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [detectedLocation, setDetectedLocation] = useState<UserLocationInfo | null>(
     () => getStoredUserLocation()
   );
@@ -38,6 +39,7 @@ export const LocationPermissionBanner: React.FC<Props> = ({
 
   const handleGrantPermission = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const loc = await requestAndDetectUserLocation();
       setDetectedLocation(loc);
@@ -45,9 +47,10 @@ export const LocationPermissionBanner: React.FC<Props> = ({
       if (onLocationUpdated) {
         onLocationUpdated(loc);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn("Location error:", err);
-      setIsVisible(false);
+      // Tetap tampil + tampilkan pesan agar pengguna bisa mencoba lagi.
+      setErrorMsg((err as Error)?.message || "Gagal mendeteksi lokasi.");
     } finally {
       setLoading(false);
     }
@@ -81,6 +84,11 @@ export const LocationPermissionBanner: React.FC<Props> = ({
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
             Aktifkan lokasi agar aplikasi otomatis mengisi kota dan menampilkan daftar SPBU di sekitar Anda saat mencatat bensin.
           </p>
+          {errorMsg && (
+            <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1.5 leading-relaxed bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-2">
+              {errorMsg}
+            </p>
+          )}
           <div className="flex items-center gap-2 mt-3">
             <button
               type="button"
@@ -96,7 +104,7 @@ export const LocationPermissionBanner: React.FC<Props> = ({
               ) : (
                 <>
                   <Navigation className="w-3.5 h-3.5" />
-                  <span>Izinkan Lokasi</span>
+                  <span>{errorMsg ? "Coba Lagi" : "Izinkan Lokasi"}</span>
                 </>
               )}
             </button>

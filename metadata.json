@@ -1,5 +1,5 @@
 {
-  "name": "Catatan BBM & Servis",
+  "name": "DigiFuel",
   "description": "Aplikasi pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.",
   "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
