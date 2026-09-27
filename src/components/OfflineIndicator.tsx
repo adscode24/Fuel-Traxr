@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { WifiOff, Cloud, CloudOff, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 
@@ -20,6 +20,10 @@ function formatTime(iso: string | null): string {
   }
 }
 
+// Status pills ditaruh di bawah header (tidak menutupi tombol) + pointer-events-none
+// agar tidak pernah memblokir sentuhan di layar kecil.
+const PILL_POS = "fixed top-[max(4.5rem,calc(env(safe-area-inset-top)+4rem))] left-1/2 -translate-x-1/2 z-50 pointer-events-none";
+
 export const OfflineIndicator: React.FC<Props> = ({
   cloudStatus = "local",
   cloudError,
@@ -28,11 +32,29 @@ export const OfflineIndicator: React.FC<Props> = ({
 }) => {
   const isOnline = useOnlineStatus();
 
+  // Pil "Tersinkron" hanya flash singkat tiap ada sinkronisasi baru,
+  // lalu hilang otomatis. Tidak tampil saat pertama dibuka.
+  const [showSyncedFlash, setShowSyncedFlash] = useState(false);
+  const skipFirstSyncRef = useRef(true);
+
+  useEffect(() => {
+    if (cloudStatus === "synced" && lastSyncedAt) {
+      if (skipFirstSyncRef.current) {
+        skipFirstSyncRef.current = false;
+        return;
+      }
+      setShowSyncedFlash(true);
+      const t = setTimeout(() => setShowSyncedFlash(false), 2500);
+      return () => clearTimeout(t);
+    }
+    setShowSyncedFlash(false);
+  }, [cloudStatus, lastSyncedAt]);
+
   if (!isOnline) {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-amber-500/40">
-        <WifiOff className="w-3.5 h-3.5 animate-pulse" />
-        <span>Mode Offline — Data tersimpan aman di perangkat</span>
+      <div className={`${PILL_POS} flex items-center gap-2 rounded-full bg-amber-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-amber-500/40 max-w-[92vw]`}>
+        <WifiOff className="w-3.5 h-3.5 animate-pulse shrink-0" />
+        <span className="truncate">Mode Offline — Data tersimpan aman di perangkat</span>
       </div>
     );
   }
@@ -44,7 +66,7 @@ export const OfflineIndicator: React.FC<Props> = ({
     return (
       <div
         title={cloudError || "Gagal sinkron cloud"}
-        className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-rose-500/40 max-w-[92vw]"
+        className={`${PILL_POS} flex items-center gap-2 rounded-full bg-rose-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-rose-500/40 max-w-[92vw]`}
       >
         <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
         <span className="truncate">Cloud bermasalah — data aman lokal</span>
@@ -54,19 +76,20 @@ export const OfflineIndicator: React.FC<Props> = ({
 
   if (cloudStatus === "connecting" || isSyncing || cloudStatus === "syncing") {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-blue-500/40">
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        <span>Menyinkron ke Cloud…</span>
+      <div className={`${PILL_POS} flex items-center gap-2 rounded-full bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl backdrop-blur-md animate-in fade-in duration-200 border border-blue-500/40 max-w-[92vw]`}>
+        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+        <span className="truncate">Menyinkron ke Cloud…</span>
       </div>
     );
   }
 
-  if (cloudStatus === "synced" && lastSyncedAt) {
+  // Konfirmasi singkat tiap sinkronisasi selesai — otomatis hilang.
+  if (showSyncedFlash && cloudStatus === "synced" && lastSyncedAt) {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 rounded-full bg-emerald-600/90 px-3 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md border border-emerald-500/40">
-        <CheckCircle2 className="w-3 h-3" />
-        <span className="flex items-center gap-1">
-          <Cloud className="w-3 h-3" />
+      <div className={`${PILL_POS} flex items-center gap-1.5 rounded-full bg-emerald-600/90 px-3 py-1 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md border border-emerald-500/40 max-w-[92vw] animate-in fade-in duration-200`}>
+        <CheckCircle2 className="w-3 h-3 shrink-0" />
+        <span className="flex items-center gap-1 truncate">
+          <Cloud className="w-3 h-3 shrink-0" />
           Tersinkron {formatTime(lastSyncedAt)}
         </span>
       </div>
@@ -75,9 +98,9 @@ export const OfflineIndicator: React.FC<Props> = ({
 
   if (cloudStatus === "offline") {
     return (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-slate-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl border border-slate-600/40">
-        <CloudOff className="w-3.5 h-3.5" />
-        <span>Menunggu online untuk sinkron</span>
+      <div className={`${PILL_POS} flex items-center gap-2 rounded-full bg-slate-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xl border border-slate-600/40 max-w-[92vw]`}>
+        <CloudOff className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate">Menunggu online untuk sinkron</span>
       </div>
     );
   }

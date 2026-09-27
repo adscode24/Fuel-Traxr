@@ -676,8 +676,8 @@ export function App() {
     <div className="min-h-screen bg-slate-100 dark:bg-[#0c1017] text-slate-900 dark:text-slate-100 flex flex-col transition-colors">
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs font-semibold rounded-full shadow-lg border border-slate-700/60 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2 max-w-sm text-center">
-          <span>{toastMessage}</span>
+        <div className="fixed top-[max(0.75rem,env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-[60] px-4 py-2 bg-slate-900/90 dark:bg-slate-800/95 text-white text-xs font-semibold rounded-full shadow-lg border border-slate-700/60 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-2 max-w-[92vw] text-center pointer-events-none">
+          <span className="truncate">{toastMessage}</span>
         </div>
       )}
 

@@ -33,13 +33,13 @@ export const AndroidHeader: React.FC<Props> = ({
   const displayName = user?.displayName || user?.email?.split("@")[0] || "Akun";
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#111724]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 transition-colors">
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#111724]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 transition-colors">
       <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
         {/* Left: App title / Vehicle Switcher or Register Vehicle Button */}
         {activeVehicle ? (
           <button
             onClick={onOpenVehicleSelector}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 dark:bg-[#182133] dark:hover:bg-[#1f2b42] border border-slate-200 dark:border-slate-700/80 transition active:scale-98 group text-left min-w-0"
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 dark:bg-[#182133] dark:hover:bg-[#1f2b42] border border-slate-200 dark:border-slate-700/80 transition active:scale-98 group text-left min-w-0 flex-1 sm:flex-none"
             title="Ganti atau Kelola Kendaraan"
           >
             <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
