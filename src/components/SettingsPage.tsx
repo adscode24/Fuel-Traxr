@@ -168,11 +168,11 @@ export const SettingsPage: React.FC<Props> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">App Name / Judul</div>
-              <div className="font-semibold text-slate-900 dark:text-white">Catatan BBM &amp; Servis</div>
+              <div className="font-semibold text-slate-900 dark:text-white">Fuel Tracker</div>
             </div>
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">Package / App ID</div>
-              <div className="font-mono font-semibold text-blue-600 dark:text-blue-400">com.catatanbbm.app</div>
+              <div className="font-mono font-semibold text-blue-600 dark:text-blue-400">com.fueltracker.app</div>
             </div>
             <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
               <div className="text-[11px] text-slate-500 dark:text-slate-400">Native Bridge Engine</div>

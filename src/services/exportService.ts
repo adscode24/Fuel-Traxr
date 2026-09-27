@@ -95,7 +95,7 @@ export function exportToExcel(
   const wsService = XLSX.utils.json_to_sheet(serviceRows);
   XLSX.utils.book_append_sheet(wb, wsService, "Jadwal Servis");
 
-  const fileName = `Laporan_Kendaraan_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const fileName = `Fuel_Tracker_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 
@@ -122,7 +122,7 @@ export function exportToPDF(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(255, 255, 255);
-  doc.text("LAPORAN PENGISIAN BBM & SERVIS KENDARAAN", 14, 12);
+  doc.text("FUEL TRACKER - LAPORAN KENDARAAN", 14, 12);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -317,7 +317,7 @@ export function exportToPDF(
     y += 5.5;
   });
 
-  const fileName = `Laporan_Kendaraan_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
+  const fileName = `Fuel_Tracker_${vehicle.name.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.pdf`;
   doc.save(fileName);
 }
 

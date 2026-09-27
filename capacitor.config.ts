@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.catatanbbm.app',
-  appName: 'Catatan BBM & Servis',
+  appId: 'com.fueltracker.app',
+  appName: 'Fuel Tracker',
   webDir: 'dist',
   server: {
     androidScheme: 'https',

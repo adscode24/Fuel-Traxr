@@ -1,7 +1,7 @@
 {
-  "name": "Catatan BBM & Servis",
-  "short_name": "CatatanBBM",
-  "description": "Aplikasi pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.",
+  "name": "Fuel Tracker",
+  "short_name": "Fuel Tracker",
+  "description": "Aplikasi Fuel Tracker: pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0c1017",

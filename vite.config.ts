@@ -21,10 +21,10 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: '/',
-          name: 'Catatan BBM & Servis',
-          short_name: 'CatatanBBM',
+          name: 'Fuel Tracker',
+          short_name: 'Fuel Tracker',
           description:
-            'Aplikasi pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.',
+            'Aplikasi Fuel Tracker: pencatatan BBM dan servis armada kendaraan dengan penyimpanan lokal di perangkat, info harga BBM terupdate harian, rute SPBU terdekat, analisis efisiensi km/l, dan laporan PDF/Excel.',
           theme_color: '#111724',
           background_color: '#0c1017',
           display: 'standalone',

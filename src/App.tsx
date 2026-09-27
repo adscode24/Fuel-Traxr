@@ -364,7 +364,7 @@ export function App() {
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
         <div className="text-white font-bold text-sm tracking-wide">
-          Memuat Catatan BBM &amp; Servis...
+          Memuat Fuel Tracker...
         </div>
       </div>
     );
