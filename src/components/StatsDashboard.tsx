@@ -31,6 +31,8 @@ import {
   Wrench,
   CreditCard,
   Layers,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit, ServiceHistoryEntry } from "../types";
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
@@ -74,6 +76,27 @@ export const StatsDashboard: React.FC<Props> = ({
 
   // Selected mode for Pie Chart: "spbu" or "fuelType"
   const [pieChartMode, setPieChartMode] = useState<"spbu" | "fuelType">("spbu");
+
+  // Ringkasan Biaya Kendaraan: default tersembunyi, toggle ikon mata
+  const [costHidden, setCostHidden] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem("digifuel_hide_cost_summary");
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
+  });
+  const toggleCostHidden = () => {
+    setCostHidden((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("digifuel_hide_cost_summary", next ? "1" : "0");
+      } catch {
+        // abaikan
+      }
+      return next;
+    });
+  };
 
   // Format IDR helper
   const formatRupiah = (val: number) => {
@@ -769,8 +792,24 @@ export const StatsDashboard: React.FC<Props> = ({
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             )}
+            <button
+              type="button"
+              onClick={toggleCostHidden}
+              className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
+              title={costHidden ? "Tampilkan ringkasan biaya" : "Sembunyikan ringkasan biaya"}
+              aria-label={costHidden ? "Tampilkan ringkasan biaya" : "Sembunyikan ringkasan biaya"}
+            >
+              {costHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
 
+          {costHidden ? (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <EyeOff className="w-3.5 h-3.5 shrink-0" />
+              Ringkasan disembunyikan — ketuk ikon mata untuk melihat.
+            </p>
+          ) : (
+            <>
           {/* Banner Total Keseluruhan Pengeluaran */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-[#0d1320] dark:via-[#131b2c] dark:to-[#172136] text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between gap-3">
             <div>
@@ -858,6 +897,8 @@ export const StatsDashboard: React.FC<Props> = ({
               </span>
             </div>
           </div>
+            </>
+          )}
         </div>
       </div>
 

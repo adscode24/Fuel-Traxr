@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   User as UserIcon,
@@ -12,6 +12,11 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Calendar,
+  QrCode,
+  Eye,
+  EyeOff,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { logoutUser } from "../services/firebaseAuth";
@@ -46,6 +51,22 @@ export const UserProfileModal: React.FC<Props> = ({
 
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // Barcode My Pertamina: tersimpan lokal per akun, default disembunyikan
+  const barcodeKey = `digifuel_mypertamina_barcode_${user.uid}`;
+  const [barcode, setBarcode] = useState<string | null>(null);
+  const [showBarcode, setShowBarcode] = useState(false);
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setShowBarcode(false);
+    try {
+      setBarcode(localStorage.getItem(barcodeKey));
+    } catch {
+      setBarcode(null);
+    }
+  }, [isOpen, barcodeKey]);
+
   if (!isOpen) return null;
 
   const handleLogout = async () => {
@@ -64,6 +85,51 @@ export const UserProfileModal: React.FC<Props> = ({
   const displayName = user.displayName || user.email?.split("@")[0] || "Pengguna";
   const email = user.email || "Email tidak tertera";
   const isGoogle = user.providerData?.some((p) => p.providerId === "google.com");
+
+  const handleBarcodeFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          // QR harus tajam: simpan PNG max 900px
+          const MAX_DIM = 900;
+          let { width, height } = img;
+          const scale = Math.min(1, MAX_DIM / Math.max(width, height));
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/png");
+          try {
+            localStorage.setItem(barcodeKey, dataUrl);
+          } catch {
+            // penyimpanan penuh — abaikan
+          }
+          setBarcode(dataUrl);
+          setShowBarcode(false);
+        } catch {
+          // abaikan
+        }
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveBarcode = () => {
+    try {
+      localStorage.removeItem(barcodeKey);
+    } catch {
+      // abaikan
+    }
+    setBarcode(null);
+    setShowBarcode(false);
+  };
 
   return (
     <div
@@ -159,6 +225,100 @@ export const UserProfileModal: React.FC<Props> = ({
                 </span>
               )}
             </span>
+          </div>
+
+          {/* Barcode My Pertamina */}
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#101622] border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-500/15 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">
+                    Barcode My Pertamina
+                  </div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Ditampilkan tersembunyi demi keamanan
+                  </div>
+                </div>
+              </div>
+              {barcode && (
+                <button
+                  type="button"
+                  onClick={() => setShowBarcode((v) => !v)}
+                  className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition"
+                  title={showBarcode ? "Sembunyikan barcode" : "Tampilkan barcode"}
+                  aria-label={showBarcode ? "Sembunyikan barcode" : "Tampilkan barcode"}
+                >
+                  {showBarcode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
+
+            <div className="mt-2.5">
+              {barcode ? (
+                <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-white">
+                  <img
+                    src={barcode}
+                    alt="Barcode My Pertamina"
+                    className={`w-full max-h-56 object-contain bg-white transition-all ${
+                      showBarcode ? "" : "blur-lg select-none pointer-events-none"
+                    }`}
+                    draggable={false}
+                  />
+                  {!showBarcode && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBarcode(true)}
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-slate-900/40 text-white transition"
+                    >
+                      <Eye className="w-6 h-6" />
+                      <span className="text-[11px] font-semibold">Ketuk untuk menampilkan</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => barcodeInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-red-500 bg-white dark:bg-[#10141e] text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 text-xs font-medium transition cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Upload Barcode dari Galeri / Kamera</span>
+                </button>
+              )}
+              <input
+                ref={barcodeInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (barcodeInputRef.current) barcodeInputRef.current.value = "";
+                  if (file) handleBarcodeFile(file);
+                }}
+              />
+              {barcode && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => barcodeInputRef.current?.click()}
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#182133] dark:hover:bg-[#1f2b42] text-slate-600 dark:text-slate-300 text-[11px] font-semibold transition"
+                  >
+                    Ganti Barcode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRemoveBarcode}
+                    className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition"
+                    title="Hapus barcode"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Actions */}
