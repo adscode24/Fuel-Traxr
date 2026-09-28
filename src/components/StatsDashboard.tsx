@@ -785,16 +785,6 @@ export const StatsDashboard: React.FC<Props> = ({
               </div>
             </div>
 
-            {onNavigateTab && (
-              <button
-                type="button"
-                onClick={() => onNavigateTab("biaya")}
-                className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5 cursor-pointer shrink-0"
-              >
-                <span>Lihat Riwayat Biaya</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
             <button
               type="button"
               onClick={toggleCostHidden}

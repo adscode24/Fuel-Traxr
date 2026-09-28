@@ -48,6 +48,7 @@ import { LocationPermissionBanner } from "./components/LocationPermissionBanner"
 import { AuthModal } from "./components/AuthModal";
 import { UserProfileModal } from "./components/UserProfileModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
+import { PullToRefresh } from "./components/PullToRefresh";
 
 export function App() {
   // Auth state & loading
@@ -400,6 +401,18 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, vaultCode, vehicles, records, services, serviceHistory]);
 
+  // Pull-to-refresh (mobile): sinkron cloud bila login, else muat ulang lokal
+  const handleRefresh = useCallback(async () => {
+    if (user && isCloudCapableUid(user.uid)) {
+      await handleSyncNow();
+      return;
+    }
+    setVehicles(getStoredVehicles(null));
+    setRecords(getStoredFuelRecords(null));
+    setServices(getStoredServices(null));
+    setServiceHistory(getStoredServiceHistory(null));
+  }, [user, handleSyncNow]);
+
   // Compute active vehicle object
   const activeVehicle = useMemo(() => {
     return vehicles.find((v) => v.id === activeVehicleId) || vehicles[0] || null;
@@ -703,7 +716,8 @@ export function App() {
 
       {/* Main Tab Content */}
       <main className="flex-1 max-w-2xl w-full mx-auto p-4 sm:p-5 pb-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))]">
-        {/* Tab 1: Dashboard / Home */}
+        <PullToRefresh onRefresh={handleRefresh}>
+          {/* Tab 1: Dashboard / Home */}
         {activeTab === "home" && (
           <StatsDashboard
             records={records}
@@ -805,6 +819,7 @@ export function App() {
             onSyncNow={handleSyncNow}
           />
         )}
+        </PullToRefresh>
       </main>
 
       {/* Floating Bottom Navigation Bar */}
