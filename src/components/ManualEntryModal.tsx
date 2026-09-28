@@ -44,7 +44,6 @@ interface Props {
   activeVehicle: Vehicle | null;
   editingRecord?: FuelRecord | null;
   onSaveRecord: (record: Partial<FuelRecord>) => void;
-  onOpenSettings?: () => void;
 }
 
 // Helper to get formatted local current date (YYYY-MM-DD) and current time (HH:mm)
@@ -67,7 +66,6 @@ export const ManualEntryModal: React.FC<Props> = ({
   activeVehicle,
   editingRecord,
   onSaveRecord,
-  onOpenSettings,
 }) => {
   useAndroidBackButton({ isOpen, onClose, id: "manual_entry" });
 
@@ -97,7 +95,6 @@ export const ManualEntryModal: React.FC<Props> = ({
   const scanInputRef = useRef<HTMLInputElement>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState<{ type: "success" | "error" | "warn"; text: string } | null>(null);
-  const [scanNeedsKey, setScanNeedsKey] = useState(false);
 
   // Helper to parse numbers from string supporting both comma (,) and dot (.)
   const parseNum = (val: string): number => {
@@ -184,11 +181,9 @@ export const ManualEntryModal: React.FC<Props> = ({
   // Handle scan struk SPBU: foto langsung / upload -> Gemini -> isi form otomatis
   const handleScanFile = async (file: File) => {
     setScanMsg(null);
-    setScanNeedsKey(false);
     const apiKey = getGeminiApiKey();
     if (!apiKey) {
-      setScanNeedsKey(true);
-      setScanMsg({ type: "warn", text: "Isi API key Gemini di Pengaturan dulu untuk memakai Scan Struk." });
+      setScanMsg({ type: "warn", text: "Layanan Scan Struk belum tersedia di build ini." });
       return;
     }
     setIsScanning(true);
@@ -415,18 +410,6 @@ export const ManualEntryModal: React.FC<Props> = ({
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
               Struk Pertamina, Shell, BP, Vivo terbaca otomatis. Odometer tetap diisi manual.
-              {scanNeedsKey && onOpenSettings && (
-                <>
-                  {" "}
-                  <button
-                    type="button"
-                    onClick={onOpenSettings}
-                    className="text-violet-600 dark:text-violet-300 font-bold hover:underline"
-                  >
-                    Buka Pengaturan
-                  </button>
-                </>
-              )}
             </p>
             {scanMsg && (
               <div

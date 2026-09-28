@@ -48,6 +48,8 @@ jobs:
         run: npm install @capacitor/android@^8.5.2 @capacitor/core@^8.5.2 @capacitor/cli@^8.5.2
 
       - name: Build web assets
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: npx vite build
 
       - name: Add Android platform if missing

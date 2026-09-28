@@ -19,22 +19,12 @@ import {
   LogIn,
   User as UserIcon,
   LogOut,
-  Smartphone,
   Copy,
-  Terminal,
-  ExternalLink,
-  Sparkles,
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { FuelEfficiencyUnit, Vehicle, FuelRecord, ServiceHistoryEntry } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { DeviceBackupPayload, parseDeviceBackupFile } from "../services/storage";
-import {
-  getGeminiApiKey,
-  setGeminiApiKey,
-  clearGeminiApiKey,
-} from "../services/receiptScan";
-import { PWAInstallButton } from "./PWAInstallButton";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
 interface Props {
@@ -86,9 +76,6 @@ export const SettingsPage: React.FC<Props> = ({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
-  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiApiKey());
-  const [geminiKeySaved, setGeminiKeySaved] = useState(() => getGeminiApiKey().length > 0);
-  const [geminiKeyMsg, setGeminiKeyMsg] = useState<string | null>(null);
 
   const handleCopyText = (text: string, id: string) => {
     try {
@@ -255,107 +242,6 @@ export const SettingsPage: React.FC<Props> = ({
           </div>
         )}
       </div>
-
-      {/* 0. Kesiapan & Instalasi Android APK (PWA & Native Capacitor) - Disembunyikan jika aplikasi sudah terpasang di HP */}
-      {!isInstalled && (
-        <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Smartphone className="w-4.5 h-4.5" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                Kesiapan Aplikasi Android (APK Ready)
-              </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Aplikasi telah diuji dan siap diinstal langsung atau dibuild ke file APK Android.
-              </p>
-            </div>
-          </div>
-
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            100% Siap Build APK
-          </span>
-        </div>
-
-        {/* In-app Install Banner */}
-        <PWAInstallButton variant="banner" />
-
-        {/* Android Configuration Breakdown */}
-        <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90 space-y-3">
-          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            <span>Spesifikasi Konfigurasi Android:</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">App Name / Judul</div>
-              <div className="font-semibold text-slate-900 dark:text-white">DigiFuel</div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Package / App ID</div>
-              <div className="font-mono font-semibold text-blue-600 dark:text-blue-400">com.digifuel.app</div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Native Bridge Engine</div>
-              <div className="font-semibold text-slate-900 dark:text-white">Capacitor 7 + Vite PWA</div>
-            </div>
-            <div className="p-2.5 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70">
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">Mode Layar &amp; Orientasi</div>
-              <div className="font-semibold text-slate-900 dark:text-white">Standalone • Portrait • Safe Area</div>
-            </div>
-          </div>
-
-          {/* CLI Instructions for building native APK */}
-          <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5 text-blue-500" />
-                <span>Langkah Build APK via Android Studio (Capacitor):</span>
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  handleCopyText(
-                    "npm run build\nnpx cap add android\nnpx cap open android",
-                    "cap-all"
-                  )
-                }
-                className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                {copiedCommand === "cap-all" ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-500" />
-                    <span className="text-emerald-500">Tersalin!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Salin Perintah</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="p-2.5 rounded-lg bg-slate-900 text-slate-100 font-mono text-xs space-y-1 overflow-x-auto">
-              <div className="text-slate-400"># 1. Compile web bundle produksi</div>
-              <div className="text-emerald-400">npm run build</div>
-              <div className="text-slate-400 pt-1"># 2. Inisialisasi platform Android</div>
-              <div className="text-emerald-400">npx cap add android</div>
-              <div className="text-slate-400 pt-1"># 3. Buka Android Studio &amp; Build APK</div>
-              <div className="text-emerald-400">npx cap open android</div>
-            </div>
-
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-              Di Android Studio: Pilih menu <strong>Build &gt; Build Bundle(s) / APK(s) &gt; Build APK(s)</strong> untuk menghasilkan berkas file <code className="text-blue-600 dark:text-blue-400 font-bold">.apk</code> yang dapat langsung dipasang di HP Android apa pun.
-            </p>
-          </div>
-        </div>
-      </div>
-      )}
 
       {/* 1. Penyimpanan Lokal di Perangkat (Device-Only Storage & Backup) */}
       <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-4">
@@ -641,103 +527,6 @@ export const SettingsPage: React.FC<Props> = ({
             <b>7.14 L/100km</b>. Aplikasi mengonversi nilai otomatis tanpa mengubah data asli.
           </span>
         </div>
-      </div>
-
-      {/* 3. Scan Struk SPBU (Gemini AI — key milik pengguna) */}
-      <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-violet-50 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-              Scan Struk SPBU (Gemini AI)
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Foto struk untuk mengisi otomatis form Catat Pengisian BBM.
-            </p>
-          </div>
-        </div>
-
-        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-          Masukkan API key Gemini milikmu (gratis). Key hanya tersimpan di perangkat ini dan
-          dipakai saat kamu menekan <b>Scan Struk</b>. Buat key di{" "}
-          <a
-            href="https://aistudio.google.com/apikey"
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 dark:text-blue-400 font-semibold hover:underline inline-flex items-center gap-0.5"
-          >
-            aistudio.google.com/apikey <ExternalLink className="w-3 h-3" />
-          </a>
-        </p>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="password"
-            value={geminiKeyInput}
-            onChange={(e) => {
-              setGeminiKeyInput(e.target.value);
-              setGeminiKeyMsg(null);
-            }}
-            placeholder="Tempel API key Gemini di sini"
-            autoComplete="off"
-            className="flex-1 min-w-0 bg-slate-50 dark:bg-[#101622] border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-violet-500"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const v = geminiKeyInput.trim();
-              if (!v) {
-                setGeminiKeyMsg("Isi API key dulu sebelum menyimpan.");
-                return;
-              }
-              setGeminiApiKey(v);
-              setGeminiKeySaved(true);
-              setGeminiKeyMsg("API key tersimpan di perangkat ini.");
-              setTimeout(() => setGeminiKeyMsg(null), 3000);
-            }}
-            className="px-3.5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-xl transition shrink-0"
-          >
-            Simpan
-          </button>
-          {geminiKeySaved && (
-            <button
-              type="button"
-              onClick={() => {
-                clearGeminiApiKey();
-                setGeminiKeyInput("");
-                setGeminiKeySaved(false);
-                setGeminiKeyMsg("API key dihapus dari perangkat.");
-                setTimeout(() => setGeminiKeyMsg(null), 3000);
-              }}
-              className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition shrink-0"
-              title="Hapus API key"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        <div
-          className={`flex items-center gap-1.5 text-[11px] font-medium ${
-            geminiKeySaved
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-slate-500 dark:text-slate-400"
-          }`}
-        >
-          {geminiKeySaved ? (
-            <>
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>API key tersimpan — fitur Scan Struk aktif.</span>
-            </>
-          ) : (
-            <span>Belum ada API key — Scan Struk belum bisa dipakai.</span>
-          )}
-        </div>
-        {geminiKeyMsg && (
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">{geminiKeyMsg}</p>
-        )}
       </div>
 
       {/* 4. Theme Preferences */}

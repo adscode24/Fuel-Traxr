@@ -1,20 +1,33 @@
 /**
- * Scan struk SPBU via Gemini AI (opsi A — key milik pengguna).
+ * Scan struk SPBU via Gemini AI (key bawaan tertanam saat build cloud).
  * Alur: foto/upload struk -> kompres di perangkat -> kirim ke Gemini REST API
  * langsung dari perangkat -> terima JSON terstruktur -> isi form catatan BBM.
- * Key disimpan lokal di perangkat (localStorage), tidak dikirim ke mana pun
- * selain API Google.
+ * API key disuntik saat build via secret GitHub (VITE_GEMINI_API_KEY) sehingga
+ * pengguna tidak perlu mengisi apa pun. Key manual di localStorage (bila ada)
+ * dipakai sebagai override.
  */
 
 const STORAGE_KEY = "digifuel_gemini_api_key";
 const GEMINI_MODEL = "gemini-2.0-flash";
 
-export function getGeminiApiKey(): string {
+function bundledApiKey(): string {
   try {
-    return (localStorage.getItem(STORAGE_KEY) || "").trim();
+    const v = (import.meta as unknown as { env?: Record<string, string> }).env
+      ?.VITE_GEMINI_API_KEY;
+    return (v || "").trim();
   } catch {
     return "";
   }
+}
+
+export function getGeminiApiKey(): string {
+  try {
+    const manual = (localStorage.getItem(STORAGE_KEY) || "").trim();
+    if (manual) return manual;
+  } catch {
+    // abaikan
+  }
+  return bundledApiKey();
 }
 
 export function setGeminiApiKey(key: string) {
@@ -281,7 +294,7 @@ function extractJson(text: string): ReceiptScanData {
 
 function mapScanError(status: number, bodyText: string): string {
   if (status === 400 && /api key|api_key|key/i.test(bodyText)) {
-    return "API key Gemini tidak valid. Periksa kembali key di Pengaturan.";
+    return "API key Gemini bermasalah. Coba lagi nanti atau hubungi pengembang aplikasi.";
   }
   if (status === 403) {
     return "Akses Gemini ditolak. Pastikan API key aktif dan billing/kuota mencukupi.";
