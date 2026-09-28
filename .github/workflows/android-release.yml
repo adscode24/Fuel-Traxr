@@ -107,8 +107,8 @@ jobs:
           # APK: zipalign lalu apksigner
           "${BT}zipalign" -v -p 4 "$APK_UNSIGNED" android/app-release-aligned.apk
           "${BT}apksigner" sign --ks android/release.keystore \
-            --ks-pass:env:ANDROID_KEYSTORE_PASSWORD \
-            --key-pass:env:ANDROID_KEY_PASSWORD \
+            --ks-pass "env:ANDROID_KEYSTORE_PASSWORD" \
+            --key-pass "env:ANDROID_KEY_PASSWORD" \
             --ks-key-alias "$ANDROID_KEY_ALIAS" \
             --out android/app-release.apk android/app-release-aligned.apk
           "${BT}apksigner" verify --print-certs android/app-release.apk
