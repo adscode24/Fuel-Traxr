@@ -820,6 +820,11 @@ export function App() {
         activeVehicle={activeVehicle}
         editingRecord={editingRecord}
         onSaveRecord={handleSaveFuelRecord}
+        onOpenSettings={() => {
+          setIsManualModalOpen(false);
+          setEditingRecord(null);
+          setActiveTab("setting");
+        }}
       />
 
       {/* Vehicle Selector / Switcher Modal */}
