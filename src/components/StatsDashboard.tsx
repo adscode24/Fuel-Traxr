@@ -98,6 +98,9 @@ export const StatsDashboard: React.FC<Props> = ({
     });
   };
 
+  // Mode hide: setiap angka rupiah di ringkasan tampil "****"
+  const maskRp = (v: number) => (costHidden ? "****" : formatRupiah(v));
+
   // Format IDR helper
   const formatRupiah = (val: number) => {
     return `Rp${Math.round(val).toLocaleString("id-ID")}`;
@@ -803,13 +806,6 @@ export const StatsDashboard: React.FC<Props> = ({
             </button>
           </div>
 
-          {costHidden ? (
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-              <EyeOff className="w-3.5 h-3.5 shrink-0" />
-              Ringkasan disembunyikan — ketuk ikon mata untuk melihat.
-            </p>
-          ) : (
-            <>
           {/* Banner Total Keseluruhan Pengeluaran */}
           <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-[#0d1320] dark:via-[#131b2c] dark:to-[#172136] text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between gap-3">
             <div>
@@ -817,7 +813,7 @@ export const StatsDashboard: React.FC<Props> = ({
                 Total Biaya Keseluruhan (BBM + Operasional)
               </span>
               <div className="text-lg sm:text-xl md:text-2xl font-bold font-mono tracking-tight text-white mt-0.5">
-                {formatRupiah(expenseBreakdown.totalExpenseOverall)}
+                {maskRp(expenseBreakdown.totalExpenseOverall)}
               </div>
             </div>
             <div className="text-right text-[11px] text-slate-300 shrink-0">
@@ -841,7 +837,7 @@ export const StatsDashboard: React.FC<Props> = ({
                   <span>Bahan Bakar</span>
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
-                  {formatRupiah(periodFuelCost)}
+                  {maskRp(periodFuelCost)}
                 </div>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
@@ -857,7 +853,7 @@ export const StatsDashboard: React.FC<Props> = ({
                   <span>Servis Bengkel</span>
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
-                  {formatRupiah(expenseBreakdown.serviceCost)}
+                  {maskRp(expenseBreakdown.serviceCost)}
                 </div>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
@@ -873,7 +869,7 @@ export const StatsDashboard: React.FC<Props> = ({
                   <span>Top Up E-Toll</span>
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
-                  {formatRupiah(expenseBreakdown.etollCost)}
+                  {maskRp(expenseBreakdown.etollCost)}
                 </div>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
@@ -889,7 +885,7 @@ export const StatsDashboard: React.FC<Props> = ({
                   <span>Biaya Lainnya</span>
                 </div>
                 <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono mt-1.5 truncate">
-                  {formatRupiah(expenseBreakdown.lainnyaCost)}
+                  {maskRp(expenseBreakdown.lainnyaCost)}
                 </div>
               </div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
@@ -897,8 +893,6 @@ export const StatsDashboard: React.FC<Props> = ({
               </span>
             </div>
           </div>
-            </>
-          )}
         </div>
       </div>
 

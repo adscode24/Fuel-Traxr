@@ -41,6 +41,8 @@ import { BiayaPage } from "./components/BiayaPage";
 import { ReportPage } from "./components/ReportPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { ManualEntryModal } from "./components/ManualEntryModal";
+import { ExpenseEntryModal } from "./components/ExpenseEntryModal";
+import { QuickAddFab } from "./components/QuickAddFab";
 import { VehicleSelectorModal } from "./components/VehicleSelectorModal";
 import { LocationPermissionBanner } from "./components/LocationPermissionBanner";
 import { AuthModal } from "./components/AuthModal";
@@ -79,6 +81,7 @@ export function App() {
   // UI Navigation & Modals - Default is "home" as requested
   const [activeTab, setActiveTab] = useState<NavTab>("home");
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FuelRecord | null>(null);
 
@@ -810,6 +813,17 @@ export function App() {
         onChangeTab={setActiveTab}
       />
 
+      {/* Floating + : pilihan cepat Catat Bensin / Catat Biaya (khusus Home) */}
+      {activeTab === "home" && (
+        <QuickAddFab
+          onAddFuel={() => {
+            setEditingRecord(null);
+            setIsManualModalOpen(true);
+          }}
+          onAddExpense={() => setIsExpenseModalOpen(true)}
+        />
+      )}
+
       {/* Manual Fuel Record Entry / Edit Modal */}
       <ManualEntryModal
         isOpen={isManualModalOpen}
@@ -820,6 +834,15 @@ export function App() {
         activeVehicle={activeVehicle}
         editingRecord={editingRecord}
         onSaveRecord={handleSaveFuelRecord}
+      />
+
+      {/* Expense Record Entry (dari FAB Home / halaman Biaya) */}
+      <ExpenseEntryModal
+        isOpen={isExpenseModalOpen}
+        onClose={() => setIsExpenseModalOpen(false)}
+        vehicle={activeVehicle}
+        editingItem={null}
+        onSaveExpense={handleSaveServiceHistory}
       />
 
       {/* Vehicle Selector / Switcher Modal */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Fuel,
@@ -12,9 +12,6 @@ import {
   Edit3,
   ListFilter,
   CheckCircle2,
-  ScanLine,
-  Camera,
-  AlertTriangle,
 } from "lucide-react";
 import { Vehicle, FuelRecord } from "../types";
 import {
@@ -29,13 +26,6 @@ import {
   SPBUStationOption,
   UserLocationInfo,
 } from "../services/locationService";
-import {
-  getGeminiApiKey,
-  readFileAsDataUrl,
-  compressReceiptImage,
-  scanReceiptImage,
-  mapScanToForm,
-} from "../services/receiptScan";
 import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
 
 interface Props {
@@ -90,11 +80,6 @@ export const ManualEntryModal: React.FC<Props> = ({
   const [isLocating, setIsLocating] = useState(false);
   const [locationSuccessMsg, setLocationSuccessMsg] = useState<string | null>(null);
   const [isCustomStation, setIsCustomStation] = useState(false);
-
-  // Scan struk SPBU via Gemini AI
-  const scanInputRef = useRef<HTMLInputElement>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanMsg, setScanMsg] = useState<{ type: "success" | "error" | "warn"; text: string } | null>(null);
 
   // Helper to parse numbers from string supporting both comma (,) and dot (.)
   const parseNum = (val: string): number => {
@@ -175,53 +160,6 @@ export const ManualEntryModal: React.FC<Props> = ({
       alert((err as Error)?.message || "Tidak dapat mendeteksi lokasi otomatis.");
     } finally {
       setIsLocating(false);
-    }
-  };
-
-  // Handle scan struk SPBU: foto langsung / upload -> Gemini -> isi form otomatis
-  const handleScanFile = async (file: File) => {
-    setScanMsg(null);
-    const apiKey = getGeminiApiKey();
-    if (!apiKey) {
-      setScanMsg({ type: "warn", text: "Layanan Scan Struk belum tersedia di build ini." });
-      return;
-    }
-    setIsScanning(true);
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const { base64, mime } = await compressReceiptImage(dataUrl);
-      const scanned = await scanReceiptImage(base64, mime, apiKey);
-      const mapped = mapScanToForm(scanned);
-
-      if (mapped.stationName) setStationName(mapped.stationName);
-      if (mapped.fuelType) {
-        setFuelType(mapped.fuelType);
-        setOctaneOrGrade(mapped.octaneOrGrade);
-      }
-      if (mapped.liters) setLiters(mapped.liters);
-      if (mapped.pricePerLiter) setPricePerLiter(mapped.pricePerLiter);
-      if (mapped.totalCost) setTotalCost(mapped.totalCost);
-      if (mapped.date) setDate(mapped.date);
-      if (mapped.time) setTime(mapped.time);
-      if (mapped.location) {
-        setLocation(mapped.location);
-        setUserLocation((prev) =>
-          prev ? prev : { city: mapped.location, source: "gps" as const }
-        );
-      }
-      if (mapped.notes) {
-        setNotes((prev) => (prev ? `${prev} • ${mapped.notes}` : `Struk: ${mapped.notes}`));
-      }
-      if (mapped.warnings.length > 0) {
-        setScanMsg({ type: "warn", text: `Hasil scan terisi — periksa kembali. ${mapped.warnings.join(" ")}` });
-      } else {
-        setScanMsg({ type: "success", text: "Struk terbaca — periksa kembali lalu isi Odometer manual." });
-      }
-      setTimeout(() => setScanMsg(null), 6000);
-    } catch (err: unknown) {
-      setScanMsg({ type: "error", text: (err as Error)?.message || "Gagal memindai struk." });
-    } finally {
-      setIsScanning(false);
     }
   };
 
@@ -382,66 +320,6 @@ export const ManualEntryModal: React.FC<Props> = ({
           onSubmit={handleSubmit}
           className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5 text-xs"
         >
-          {/* Scan Struk SPBU via Gemini AI */}
-          <div className="rounded-xl border border-violet-200 dark:border-violet-500/30 bg-violet-50/70 dark:bg-violet-500/10 p-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => scanInputRef.current?.click()}
-                disabled={isScanning}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition shadow-xs disabled:opacity-60"
-              >
-                {isScanning ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Memindai struk…</span>
-                  </>
-                ) : (
-                  <>
-                    <ScanLine className="w-4 h-4" />
-                    <span>Scan Struk (Foto / Upload)</span>
-                  </>
-                )}
-              </button>
-              <span className="hidden sm:flex items-center gap-1 text-[10px] text-violet-600/80 dark:text-violet-300/80 font-medium shrink-0">
-                <Camera className="w-3.5 h-3.5" />
-                Kamera / Galeri
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-              Struk Pertamina, Shell, BP, Vivo terbaca otomatis. Odometer tetap diisi manual.
-            </p>
-            {scanMsg && (
-              <div
-                className={`flex items-start gap-1.5 mt-2 text-[11px] font-medium leading-relaxed rounded-lg p-2 border ${
-                  scanMsg.type === "success"
-                    ? "text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
-                    : scanMsg.type === "warn"
-                    ? "text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-                    : "text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20"
-                }`}
-              >
-                {scanMsg.type === "success" ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-px" />
-                ) : (
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
-                )}
-                <span>{scanMsg.text}</span>
-              </div>
-            )}
-            <input
-              ref={scanInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (scanInputRef.current) scanInputRef.current.value = "";
-                if (file) handleScanFile(file);
-              }}
-            />
-          </div>
-
           {/* Quick Date Helper */}
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
