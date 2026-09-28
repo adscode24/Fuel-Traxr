@@ -50,6 +50,15 @@ export const BottomNav: React.FC<Props> = ({ activeTab, onChangeTab }) => {
     setHoverTab((prev) => (prev === id ? prev : id));
   };
 
+  // Hold + swipe + lepas di atas ikon: langsung buka halaman itu.
+  // (Tap biasa tetap lewat onClick seperti sebelumnya.)
+  const openTabOnRelease = (clientX: number, clientY: number) => {
+    if (typeof document === "undefined" || !document.elementFromPoint) return;
+    const el = document.elementFromPoint(clientX, clientY)?.closest?.("[data-nav-tab]");
+    const id = el?.getAttribute("data-nav-tab") as NavTab | null;
+    if (id) onChangeTab(id);
+  };
+
   return (
     <nav
       id="floating-bottom-nav"
@@ -78,7 +87,9 @@ export const BottomNav: React.FC<Props> = ({ activeTab, onChangeTab }) => {
           moveSheen(t.clientX, t.clientY);
           pickTabUnderFinger(t.clientX, t.clientY);
         }}
-        onTouchEnd={() => {
+        onTouchEnd={(e) => {
+          const t = e.changedTouches[0];
+          if (t) openTabOnRelease(t.clientX, t.clientY);
           setGlow(false);
           setHoverTab(null);
         }}
