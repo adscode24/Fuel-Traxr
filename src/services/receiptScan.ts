@@ -34,6 +34,7 @@ export function clearGeminiApiKey() {
 }
 
 export interface ReceiptScanData {
+  isFuelPurchase?: boolean | null;
   brand?: string | null;
   stationCode?: string | null;
   stationPlace?: string | null;
@@ -76,7 +77,12 @@ Aturan:
 - "liters": volume BBM dalam liter dari baris Volume/Jumlah liter.
 - "pricePerLiter": harga jual per liter yang DIBAYAR konsumen (baris Harga Jual), bukan harga non-subsidi.
 - "totalCost": total yang dibayar konsumen (baris Dibayar Konsumen / Total).
-- "date": format DD/MM/YYYY. "time": format HH:MM 24 jam.
+- "date": tanggal transaksi SELALU format DD/MM/YYYY (konversi dari format apa pun:
+  "16-Sep-25" menjadi "16/09/2025", "31-Mar-2023" menjadi "31/03/2023").
+- "time": jam transaksi SELALU format HH:MM 24 jam (konversi AM/PM bila perlu:
+  "02:52 PM" menjadi "14:52").
+- "isFuelPurchase": true bila struk adalah pembelian BBM (ada volume liter dan/atau
+  produk bahan bakar); false bila struk barang/jasa lain (merchandise, makanan, dll).
 - "brand": salah satu dari "pertamina", "shell", "bp", "vivo", "lainnya" (huruf kecil).
 - "stationCode": kode angka SPBU bila ada (contoh: "3415108"), selain itu null.
 - "stationPlace": nama lokasi SPBU bila ada (contoh: "Tanah Tinggi"), selain itu null.
@@ -85,7 +91,7 @@ Aturan:
 - Field yang tidak terbaca jelas diisi null.
 
 Skema JSON:
-{"brand":null,"stationCode":null,"stationPlace":null,"stationName":null,"fuelProduct":null,"liters":null,"pricePerLiter":null,"totalCost":null,"date":null,"time":null,"city":null,"transactionNo":null,"pumpNo":null,"operatorName":null,"plateNumber":null,"paymentMethod":null,"cashPaid":null,"changeAmount":null}`;
+{"isFuelPurchase":true,"brand":null,"stationCode":null,"stationPlace":null,"stationName":null,"fuelProduct":null,"liters":null,"pricePerLiter":null,"totalCost":null,"date":null,"time":null,"city":null,"transactionNo":null,"pumpNo":null,"operatorName":null,"plateNumber":null,"paymentMethod":null,"cashPaid":null,"changeAmount":null}`;
 
 function toDisplayNumber(n: number): string {
   return String(Math.round(n));
@@ -99,18 +105,52 @@ function toDisplayDecimal(n: number): string {
 
 function toIsoDate(dmy: string | null | undefined): string {
   if (!dmy) return "";
-  const m = dmy.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-  if (!m) return "";
-  let [, d, mo, y] = m;
-  if (y.length === 2) y = "20" + y;
-  return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const s = dmy.trim();
+  // Format numerik: DD/MM/YYYY, DD-MM-YY, dll.
+  let m = s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (m) {
+    let y = m[3];
+    if (y.length === 2) y = "20" + y;
+    return `${y}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+  // Format nama bulan: "16-Sep-25", "31-Mar-2023" (Inggris/Indonesia).
+  const MONTHS: Record<string, string> = {
+    jan: "01", january: "01", januari: "01",
+    feb: "02", february: "02", februari: "02",
+    mar: "03", march: "03", maret: "03",
+    apr: "04", april: "04",
+    may: "05", mei: "05",
+    jun: "06", june: "06", juni: "06",
+    jul: "07", july: "07", juli: "07",
+    aug: "08", august: "08", agu: "08", agustus: "08",
+    sep: "09", sept: "09", september: "09",
+    oct: "10", october: "10", okt: "10", oktober: "10",
+    nov: "11", november: "11", nop: "11", nopember: "11",
+    dec: "12", december: "12", des: "12", desember: "12",
+  };
+  m = s.match(/(\d{1,2})[-\s]+([A-Za-z]+)[-\s,]+(\d{2,4})/);
+  if (m) {
+    const key = m[2].toLowerCase();
+    const mon = MONTHS[key] || MONTHS[key.slice(0, 3)];
+    if (mon) {
+      let y = m[3];
+      if (y.length === 2) y = "20" + y;
+      return `${y}-${mon}-${m[1].padStart(2, "0")}`;
+    }
+  }
+  return "";
 }
 
 function toTimeHM(t: string | null | undefined): string {
   if (!t) return "";
-  const m = t.match(/(\d{1,2})[:.](\d{2})/);
+  const m = t.trim().match(/(\d{1,2})[:.](\d{2})(?:[:.]\d{2})?\s*([AaPp])?\.?\s*[Mm]?\.?/);
   if (!m) return "";
-  return `${m[1].padStart(2, "0")}:${m[2]}`;
+  let h = parseInt(m[1], 10);
+  const ampm = (m[3] || "").toUpperCase();
+  if (ampm === "P" && h < 12) h += 12;
+  if (ampm === "A" && h === 12) h = 0;
+  if (h > 23) return "";
+  return `${String(h).padStart(2, "0")}:${m[2]}`;
 }
 
 function titleCase(s: string): string {
@@ -296,7 +336,13 @@ export async function scanReceiptImage(
   if (!text) {
     throw new Error("Gemini tidak mengembalikan hasil. Coba foto ulang dengan struk yang jelas.");
   }
-  return extractJson(text);
+  const data = extractJson(text);
+  if (data.isFuelPurchase === false) {
+    throw new Error(
+      "Struk ini tampaknya bukan pembelian BBM (mis. merchandise). Pilih foto struk pengisian BBM."
+    );
+  }
+  return data;
 }
 
 /** Ubah hasil scan menjadi nilai form + peringatan validasi. */
