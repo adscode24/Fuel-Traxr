@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Car, Bike, Plus, Check, X, Edit2, Gauge, Camera, Upload, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Vehicle } from "../types";
-import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -22,7 +22,6 @@ export const VehicleSelectorModal: React.FC<Props> = ({
   onAddVehicle,
   onUpdateVehicle,
 }) => {
-  useAndroidBackButton({ isOpen, onClose, id: "vehicle_selector" });
 
   const [showAddForm, setShowAddForm] = useState(vehicles.length === 0);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -137,21 +136,15 @@ export const VehicleSelectorModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-[#151c2b] border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-colors">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+    <BottomSheet isOpen={isOpen} onClose={onClose} id="vehicle_selector" maxWidth="max-w-md">
+      <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-4 text-slate-900 dark:text-slate-100">
+        <div className="flex items-center gap-2 pb-3 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2">
             <Car className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
               {vehicles.length === 0 ? "Daftarkan Kendaraan Anda" : "Pilih Kendaraan"}
             </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* List of Vehicles */}
@@ -695,6 +688,6 @@ export const VehicleSelectorModal: React.FC<Props> = ({
           </form>
         )}
       </div>
-    </div>
+    </BottomSheet>
   );
 };

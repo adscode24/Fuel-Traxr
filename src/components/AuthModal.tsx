@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  X,
   Mail,
   Lock,
   User as UserIcon,
@@ -22,7 +21,7 @@ import {
 } from "../services/firebaseAuth";
 import { isNativePlatform } from "../services/firebase";
 import { AppLogo } from "./AppLogo";
-import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -37,7 +36,6 @@ export const AuthModal: React.FC<Props> = ({
   initialMode = "login",
   onAuthSuccess,
 }) => {
-  useAndroidBackButton({ isOpen, onClose, id: "auth_modal" });
 
   const [mode, setMode] = useState<"login" | "register" | "forgot">(initialMode);
 
@@ -186,25 +184,10 @@ export const AuthModal: React.FC<Props> = ({
   };
 
   return (
-    <div
-      id="auth-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
-    >
-      <div
-        id="auth-modal-card"
-        className="w-full max-w-md bg-white dark:bg-[#151c2c] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-6 transition-all"
-      >
+    <BottomSheet isOpen={isOpen} onClose={onClose} id="auth_modal" maxWidth="max-w-md">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {/* Modal Top Header Banner */}
         <div className="relative bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 pt-6 pb-5 text-white">
-          <button
-            type="button"
-            id="close-auth-modal"
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white transition focus:outline-none"
-            title="Tutup (Lanjutkan Offline)"
-          >
-            <X className="w-5 h-5" />
-          </button>
 
           <div className="flex items-center gap-3">
             <AppLogo size={48} rounded="rounded-2xl" />
@@ -671,6 +654,6 @@ export const AuthModal: React.FC<Props> = ({
           </div>
         </div>
       </div>
-    </div>
+    </BottomSheet>
   );
 };

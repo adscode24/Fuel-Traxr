@@ -645,7 +645,12 @@ export const BiayaPage: React.FC<Props> = ({
 
       {/* Confirmation Modal for Deleting Record */}
       {deletingId && (
-        <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeletingId(null);
+          }}
+        >
           <div className="bg-white dark:bg-[#151c2b] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-3 shadow-2xl text-slate-900 dark:text-slate-100 transition-colors">
             <div className="flex items-center gap-2.5 text-rose-600 dark:text-rose-400">
               <AlertCircle className="w-5 h-5" />

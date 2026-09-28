@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import {
-  X,
   Fuel,
   Calendar,
   MapPin,
@@ -26,7 +25,7 @@ import {
   SPBUStationOption,
   UserLocationInfo,
 } from "../services/locationService";
-import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -57,7 +56,6 @@ export const ManualEntryModal: React.FC<Props> = ({
   editingRecord,
   onSaveRecord,
 }) => {
-  useAndroidBackButton({ isOpen, onClose, id: "manual_entry" });
 
   // Tanggal dan waktu pengisian secara default diisi dengan tanggal dan waktu saat melakukan pengisian, namun bisa diedit
   const [date, setDate] = useState(() => getNowDateTime().date);
@@ -285,8 +283,7 @@ export const ManualEntryModal: React.FC<Props> = ({
   const capacityUnit = isElectric ? "Kwh" : "Liter";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#151c2b] text-slate-900 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col transition-colors">
+    <BottomSheet isOpen={isOpen} onClose={onClose} id="manual_entry" maxWidth="max-w-lg">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#192235]">
           <div className="flex items-center space-x-2.5">
@@ -306,12 +303,6 @@ export const ManualEntryModal: React.FC<Props> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Content Body */}
@@ -808,7 +799,6 @@ export const ManualEntryModal: React.FC<Props> = ({
             Simpan Catatan
           </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };

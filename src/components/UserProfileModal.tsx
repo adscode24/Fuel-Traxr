@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  X,
   User as UserIcon,
   Mail,
   LogOut,
@@ -20,7 +19,7 @@ import {
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { logoutUser } from "../services/firebaseAuth";
-import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -47,7 +46,6 @@ export const UserProfileModal: React.FC<Props> = ({
   cloudStatus = "local",
   lastSyncedAt = null,
 }) => {
-  useAndroidBackButton({ isOpen, onClose, id: "user_profile" });
 
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -132,23 +130,10 @@ export const UserProfileModal: React.FC<Props> = ({
   };
 
   return (
-    <div
-      id="user-profile-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
-    >
-      <div
-        id="user-profile-modal-card"
-        className="w-full max-w-sm bg-white dark:bg-[#151c2c] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-6 transition-all"
-      >
+    <BottomSheet isOpen={isOpen} onClose={onClose} id="user_profile" maxWidth="max-w-sm">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {/* Header with avatar */}
         <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white text-center">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 hover:text-white transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
 
           <div className="mx-auto w-16 h-16 rounded-2xl bg-white/20 border-2 border-white/40 flex items-center justify-center text-xl font-black shadow-lg overflow-hidden mb-3">
             {user.photoURL ? (
@@ -355,6 +340,6 @@ export const UserProfileModal: React.FC<Props> = ({
           </div>
         </div>
       </div>
-    </div>
+    </BottomSheet>
   );
 };

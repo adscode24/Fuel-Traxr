@@ -89,7 +89,12 @@ export const PWAInstallButton: React.FC<Props> = ({
         </button>
 
         {showIOSGuide && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowIOSGuide(false);
+            }}
+          >
             <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#161d2d] p-5 shadow-2xl border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold">Pasang di iPhone / Safari</h3>

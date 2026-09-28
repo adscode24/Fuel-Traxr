@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Wallet, X } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { Vehicle, ServiceHistoryEntry } from "../types";
-import { useAndroidBackButton } from "../hooks/useAndroidBackButton";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   isOpen: boolean;
@@ -20,7 +20,6 @@ export const ExpenseEntryModal: React.FC<Props> = ({
   onAddExpense,
   onSaveExpense,
 }) => {
-  useAndroidBackButton({ isOpen, onClose, id: "expense_entry" });
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState<string>("Service");
@@ -108,8 +107,7 @@ export const ExpenseEntryModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 dark:bg-black/80 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-md bg-white dark:bg-[#151c2b] text-slate-900 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col transition-colors">
+    <BottomSheet isOpen={isOpen} onClose={onClose} id="expense_entry" maxWidth="max-w-md">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#192235]">
           <div className="flex items-center space-x-2.5">
@@ -125,13 +123,6 @@ export const ExpenseEntryModal: React.FC<Props> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Modal Form */}
@@ -276,7 +267,6 @@ export const ExpenseEntryModal: React.FC<Props> = ({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };
