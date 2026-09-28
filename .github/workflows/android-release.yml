@@ -1,0 +1,138 @@
+name: Build Android Release (Play Store)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Setup Android SDK packages
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" "build-tools;35.0.0"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Ensure Capacitor Android deps pinned
+        run: npm install @capacitor/android@^8.5.2 @capacitor/core@^8.5.2 @capacitor/cli@^8.5.2
+
+      - name: Build web assets
+        run: npx vite build
+
+      - name: Add Android platform if missing
+        run: |
+          if [ ! -d android ]; then
+            npx cap add android
+          fi
+
+      - name: Ensure Android location permissions
+        run: |
+          node -e "
+          const fs = require('fs');
+          const p = 'android/app/src/main/AndroidManifest.xml';
+          let xml = fs.readFileSync(p, 'utf8');
+          for (const perm of ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION']) {
+            if (!xml.includes(perm)) {
+              xml = xml.replace('<application', '<uses-permission android:name=\"' + perm + '\" />\n    <application');
+            }
+          }
+          fs.writeFileSync(p, xml);
+          console.log('location permissions ensured');
+          "
+
+      - name: Generate Android launcher icons from resources/icon-foreground.svg
+        run: npm run assets:android
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Set release versionCode / versionName
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'EOF'
+          import io, os, re
+          p = 'android/app/build.gradle'
+          s = io.open(p, encoding='utf-8', newline='').read()
+          vc = os.environ['RUN_NUMBER']
+          s2, n1 = re.subn(r'versionCode\s+\d+', f'versionCode {vc}', s, count=1)
+          s2, n2 = re.subn(r'versionName\s+"[^"]+"', 'versionName "1.0.0"', s2, count=1)
+          assert n1 == 1 and n2 == 1, 'versionCode/versionName pattern not found'
+          io.open(p, 'w', encoding='utf-8', newline='').write(s2)
+          print(f'versionCode={vc} versionName=1.0.0')
+          EOF
+
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || (echo "missing ANDROID_KEYSTORE_BASE64 secret" && exit 1)
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/release.keystore
+          ls -l android/release.keystore
+
+      - name: Build release APK + AAB (unsigned)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Sign release APK and AAB
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          echo "Using build-tools: $BT"
+          APK_UNSIGNED=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          AAB_UNSIGNED=android/app/build/outputs/bundle/release/app-release.aab
+          test -f "$APK_UNSIGNED" || (echo "unsigned APK missing" && exit 1)
+          test -f "$AAB_UNSIGNED" || (echo "unsigned AAB missing" && exit 1)
+          # APK: zipalign lalu apksigner
+          "${BT}zipalign" -v -p 4 "$APK_UNSIGNED" android/app-release-aligned.apk
+          "${BT}apksigner" sign --ks android/release.keystore \
+            --ks-pass:env ANDROID_KEYSTORE_PASSWORD \
+            --key-pass:env ANDROID_KEY_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --out android/app-release.apk android/app-release-aligned.apk
+          "${BT}apksigner" verify --print-certs android/app-release.apk
+          # AAB: jarsigner (untuk upload Play Store)
+          jarsigner -keystore android/release.keystore \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            -signedjar android/app-release.aab "$AAB_UNSIGNED" "$ANDROID_KEY_ALIAS"
+          jarsigner -verify android/app-release.aab
+          rm -f android/release.keystore android/app-release-aligned.apk
+          ls -l android/app-release.apk android/app-release.aab
+
+      - name: Upload signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: digifuel-release-apk
+          path: android/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload signed release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: digifuel-release-aab
+          path: android/app-release.aab
+          if-no-files-found: error
+          retention-days: 30

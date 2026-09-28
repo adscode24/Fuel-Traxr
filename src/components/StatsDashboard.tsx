@@ -807,7 +807,7 @@ export const StatsDashboard: React.FC<Props> = ({
           </div>
 
           {/* Banner Total Keseluruhan Pengeluaran */}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 dark:from-[#0d1320] dark:via-[#131b2c] dark:to-[#172136] text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between gap-3">
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-[#0d1320] dark:via-[#131b2c] dark:to-[#172136] text-white p-3.5 sm:p-4 rounded-xl border border-slate-800 shadow-sm flex items-center justify-between gap-3">
             <div>
               <span className="text-[11px] text-slate-300 font-medium block">
                 Total Biaya Keseluruhan (BBM + Operasional)

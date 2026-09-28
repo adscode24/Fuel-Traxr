@@ -1,4 +1,6 @@
-// Generate resources/icon.png (1024x1024) from resources/icon.svg using sharp.
+// Generate resources/icon.png (1024x1024) for @capacitor/assets using sharp.
+// Prioritas: resources/icon-foreground.svg (full-bleed, optimal untuk
+// adaptive-icon) -> resources/icon.svg -> public/icon.svg.
 // sharp already exists in devDependencies, so this works in GitHub Actions after `npm install`.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,15 +8,18 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const srcSvg = path.join(root, 'resources', 'icon.svg');
-const fallbackSvg = path.join(root, 'public', 'icon.svg');
+const candidates = [
+  path.join(root, 'resources', 'icon-foreground.svg'),
+  path.join(root, 'resources', 'icon.svg'),
+  path.join(root, 'public', 'icon.svg'),
+];
 const outPng = path.join(root, 'resources', 'icon.png');
 
 const { default: sharp } = await import('sharp');
 
-const input = fs.existsSync(srcSvg) ? srcSvg : fallbackSvg;
-if (!fs.existsSync(input)) {
-  throw new Error(`Icon SVG not found: ${input}`);
+const input = candidates.find((p) => fs.existsSync(p));
+if (!input) {
+  throw new Error(`Icon SVG not found in resources/ or public/`);
 }
 
 fs.mkdirSync(path.dirname(outPng), { recursive: true });
