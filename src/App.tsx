@@ -49,6 +49,7 @@ import { AuthModal } from "./components/AuthModal";
 import { UserProfileModal } from "./components/UserProfileModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { PullToRefresh } from "./components/PullToRefresh";
+import { maybeNotifyServiceDue } from "./services/reminderNotifications";
 
 export function App() {
   // Auth state & loading
@@ -417,6 +418,11 @@ export function App() {
   const activeVehicle = useMemo(() => {
     return vehicles.find((v) => v.id === activeVehicleId) || vehicles[0] || null;
   }, [vehicles, activeVehicleId]);
+
+  // Penjadwalan notifikasi servis native (anti-spam 1x/hari di dalam service)
+  useEffect(() => {
+    void maybeNotifyServiceDue(services, activeVehicle?.currentOdometer || 0);
+  }, [services, activeVehicle]);
 
   // If vehicle was deleted or activeVehicleId is invalid, reset to first vehicle
   useEffect(() => {

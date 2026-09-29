@@ -45,7 +45,7 @@ jobs:
         run: npm install
 
       - name: Ensure Capacitor Android deps pinned
-        run: npm install @capacitor/android@^8.5.2 @capacitor/core@^8.5.2 @capacitor/cli@^8.5.2
+        run: npm install @capacitor/android@^8.5.2 @capacitor/core@^8.5.2 @capacitor/cli@^8.5.2 @capacitor/local-notifications@^8.3.1
 
       - name: Build web assets
         run: npx vite build
@@ -62,7 +62,7 @@ jobs:
           const fs = require('fs');
           const p = 'android/app/src/main/AndroidManifest.xml';
           let xml = fs.readFileSync(p, 'utf8');
-          for (const perm of ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION']) {
+          for (const perm of ['android.permission.ACCESS_COARSE_LOCATION', 'android.permission.ACCESS_FINE_LOCATION', 'android.permission.POST_NOTIFICATIONS']) {
             if (!xml.includes(perm)) {
               xml = xml.replace('<application', '<uses-permission android:name=\"' + perm + '\" />\n    <application');
             }

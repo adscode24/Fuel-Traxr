@@ -11,6 +11,7 @@ import {
 import { User } from "firebase/auth";
 import { Vehicle } from "../types";
 import { useTheme } from "../context/ThemeContext";
+import { isNativePlatform } from "../services/firebase";
 import { PWAInstallButton } from "./PWAInstallButton";
 
 interface Props {
@@ -29,6 +30,7 @@ export const AndroidHeader: React.FC<Props> = ({
   onOpenProfile,
 }) => {
   const { theme, toggleTheme } = useTheme();
+  const isNative = isNativePlatform();
 
   const displayName = user?.displayName || user?.email?.split("@")[0] || "Akun";
 
@@ -134,8 +136,8 @@ export const AndroidHeader: React.FC<Props> = ({
             </button>
           )}
 
-          {/* Install App button if installable */}
-          <PWAInstallButton variant="compact" />
+          {/* Install App button if installable (web/PWA only — never in native APK) */}
+          {!isNative && <PWAInstallButton variant="compact" />}
 
           {/* Theme Toggle */}
           <button

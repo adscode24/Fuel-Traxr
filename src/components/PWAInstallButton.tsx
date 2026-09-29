@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Download, Smartphone, CheckCircle2, X } from "lucide-react";
 import { usePWAInstall } from "../hooks/usePWAInstall";
+import { isNativePlatform } from "../services/firebase";
 
 interface Props {
   variant?: "primary" | "compact" | "banner";
@@ -13,6 +14,9 @@ export const PWAInstallButton: React.FC<Props> = ({
 }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+
+  // Native APK tidak butuh tombol install dalam bentuk apa pun
+  if (isNativePlatform()) return null;
 
   // If already installed as native standalone app, hide the button
   if (isInstalled) {

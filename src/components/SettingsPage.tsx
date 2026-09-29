@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Settings,
   Gauge,
@@ -20,11 +20,21 @@ import {
   User as UserIcon,
   LogOut,
   Copy,
+  Bell,
+  BellOff,
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { FuelEfficiencyUnit, Vehicle, FuelRecord, ServiceHistoryEntry } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { DeviceBackupPayload, parseDeviceBackupFile } from "../services/storage";
+import {
+  getServiceNotifyEnabled,
+  setServiceNotifyEnabled,
+  getNotificationPermissionStatus,
+  ensureNotificationPermission,
+  cancelServiceNotifications,
+  sendTestNotification,
+} from "../services/reminderNotifications";
 import { usePWAInstall } from "../hooks/usePWAInstall";
 
 interface Props {
@@ -76,6 +86,58 @@ export const SettingsPage: React.FC<Props> = ({
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
+
+  // Notifikasi pengingat servis (native)
+  const [notifyEnabled, setNotifyEnabled] = useState(() => getServiceNotifyEnabled());
+  const [notifyPerm, setNotifyPerm] = useState<string>("...");
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    getNotificationPermissionStatus().then(setNotifyPerm).catch(() => setNotifyPerm("prompt"));
+  }, []);
+
+  const handleToggleNotify = async () => {
+    if (notifyBusy) return;
+    if (notifyEnabled) {
+      setServiceNotifyEnabled(false);
+      setNotifyEnabled(false);
+      await cancelServiceNotifications();
+      setNotifyMsg("Notifikasi pengingat dimatikan.");
+      return;
+    }
+    setNotifyBusy(true);
+    try {
+      const granted = await ensureNotificationPermission();
+      const status = await getNotificationPermissionStatus().catch(() => (granted ? "granted" : "denied"));
+      setNotifyPerm(status);
+      if (granted) {
+        setServiceNotifyEnabled(true);
+        setNotifyEnabled(true);
+        setNotifyMsg("Notifikasi pengingat aktif.");
+      } else {
+        setServiceNotifyEnabled(false);
+        setNotifyEnabled(false);
+        setNotifyMsg("Izin ditolak. Aktifkan via Pengaturan HP → Aplikasi → DigiFuel → Notifikasi.");
+      }
+    } finally {
+      setNotifyBusy(false);
+      setTimeout(() => setNotifyMsg(null), 4000);
+    }
+  };
+
+  const handleTestNotify = async () => {
+    if (notifyBusy) return;
+    setNotifyBusy(true);
+    try {
+      const ok = await sendTestNotification();
+      setNotifyPerm(await getNotificationPermissionStatus().catch(() => notifyPerm));
+      setNotifyMsg(ok ? "Notifikasi tes dikirim — muncul ~3 detik lagi." : "Gagal. Pastikan izin notifikasi diaktifkan.");
+    } finally {
+      setNotifyBusy(false);
+      setTimeout(() => setNotifyMsg(null), 4000);
+    }
+  };
 
   const handleCopyText = (text: string, id: string) => {
     try {
@@ -574,7 +636,59 @@ export const SettingsPage: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 4. Reset & Pembersihan Data */}
+      {/* 4. Notifikasi Pengingat Servis (native Android/iOS) */}
+      <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              {notifyEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                Notifikasi Pengingat Servis
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Izin sistem: {notifyPerm === "granted" ? "diizinkan" : notifyPerm === "denied" ? "ditolak" : notifyPerm}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleToggleNotify}
+            disabled={notifyBusy}
+            role="switch"
+            aria-checked={notifyEnabled}
+            aria-label="Aktifkan notifikasi pengingat servis"
+            className={`w-11 h-6 rounded-full transition p-0.5 flex items-center shrink-0 cursor-pointer disabled:opacity-60 ${
+              notifyEnabled ? "bg-blue-600 justify-end" : "bg-slate-300 dark:bg-slate-700 justify-start"
+            }`}
+          >
+            <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
+          </button>
+        </div>
+
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+          Saat aktif, aplikasi mengingatkan servis yang terlewat/mendekati jadwal lewat
+          notifikasi sistem (maks. 1x sehari). Di Web/PWA, pengingat hanya tampil sebagai
+          banner dalam aplikasi.
+        </p>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleTestNotify}
+            disabled={notifyBusy}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition shrink-0 disabled:opacity-60"
+          >
+            Kirim Notifikasi Tes
+          </button>
+          {notifyMsg && (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">{notifyMsg}</p>
+          )}
+        </div>
+      </div>
+
+      {/* 5. Reset & Pembersihan Data */}
       <div className="bg-white dark:bg-[#161d2d] rounded-2xl border border-rose-200 dark:border-rose-900/30 shadow-xs p-4 space-y-3">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center">
