@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
+  X,
   User as UserIcon,
   Mail,
   LogOut,
@@ -16,6 +17,7 @@ import {
   EyeOff,
   Upload,
   Trash2,
+  Maximize2,
 } from "lucide-react";
 import { User } from "firebase/auth";
 import { logoutUser } from "../services/firebaseAuth";
@@ -53,11 +55,13 @@ export const UserProfileModal: React.FC<Props> = ({
   const barcodeKey = `digifuel_mypertamina_barcode_${user.uid}`;
   const [barcode, setBarcode] = useState<string | null>(null);
   const [showBarcode, setShowBarcode] = useState(false);
+  const [barcodeFullscreen, setBarcodeFullscreen] = useState(false);
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setShowBarcode(false);
+    setBarcodeFullscreen(false);
     try {
       setBarcode(localStorage.getItem(barcodeKey));
     } catch {
@@ -284,6 +288,16 @@ export const UserProfileModal: React.FC<Props> = ({
                   if (file) handleBarcodeFile(file);
                 }}
               />
+              {barcode && showBarcode && (
+                <button
+                  type="button"
+                  onClick={() => setBarcodeFullscreen(true)}
+                  className="mt-2 w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-700 dark:text-red-300 text-xs font-bold transition"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                  <span>Klik untuk Memperbesar</span>
+                </button>
+              )}
               {barcode && (
                 <div className="flex items-center gap-2 mt-2">
                   <button
@@ -340,6 +354,40 @@ export const UserProfileModal: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Barcode My Pertamina */}
+      {barcode && showBarcode && barcodeFullscreen && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/95 flex flex-col animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setBarcodeFullscreen(false);
+          }}
+        >
+          <div className="flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2 text-white shrink-0">
+            <span className="text-xs font-bold">Barcode My Pertamina</span>
+            <button
+              type="button"
+              onClick={() => setBarcodeFullscreen(false)}
+              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition"
+              title="Tutup"
+              aria-label="Tutup"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 flex items-center justify-center p-4">
+            <img
+              src={barcode}
+              alt="Barcode My Pertamina fullscreen"
+              className="max-w-full max-h-full object-contain rounded-xl bg-white shadow-2xl"
+              draggable={false}
+            />
+          </div>
+          <p className="text-center text-[11px] text-white/70 pb-[max(1.5rem,env(safe-area-inset-bottom))] px-6 shrink-0">
+            Tunjukkan ke kasir • ketuk area gelap atau tombol × untuk kembali
+          </p>
+        </div>
+      )}
     </BottomSheet>
   );
 };
