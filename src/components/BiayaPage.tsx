@@ -92,8 +92,7 @@ export const BiayaPage: React.FC<Props> = ({
   const vehicleExpenses = useMemo(() => {
     if (!Array.isArray(serviceHistory)) return [];
     if (!vehicle) return serviceHistory;
-    const matching = serviceHistory.filter((h) => !h.vehicleId || h.vehicleId === vehicle.id);
-    return matching.length > 0 ? matching : serviceHistory;
+    return serviceHistory.filter((h) => !h.vehicleId || h.vehicleId === vehicle.id);
   }, [serviceHistory, vehicle]);
 
   // Filtered expenses list by active category filter and search query

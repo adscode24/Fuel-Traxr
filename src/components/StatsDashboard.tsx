@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { Vehicle, FuelRecord, FuelEfficiencyUnit, ServiceHistoryEntry } from "../types";
 import { formatEfficiency, getUnitLabel } from "../utils/unitConverter";
+import { scopeByVehicle } from "../utils/vehicleScope";
 import { FuelPriceTodayCard } from "./FuelPriceTodayCard";
 import { StationLogo, detectStationBrand } from "./StationLogo";
 import { DashboardCardBottomSheet, DashboardCardType } from "./DashboardCardBottomSheet";
@@ -54,8 +55,8 @@ interface Props {
 
 export const StatsDashboard: React.FC<Props> = ({
   vehicle,
-  records,
-  serviceHistory = [],
+  records: recordsProp,
+  serviceHistory: serviceHistoryProp = [],
   fuelUnit = "km/l",
   onOpenManualAdd,
   onOpenManualEntry,
@@ -115,10 +116,18 @@ export const StatsDashboard: React.FC<Props> = ({
     return "text-sm sm:text-base md:text-lg";
   };
 
+  // Data SELALU di-scope ke kendaraan aktif (tiap halaman terpisah per kendaraan).
+  // Catatan tanpa vehicleId (data lama) ikut tampil di semua kendaraan.
+  const scopedRecords = useMemo(() => scopeByVehicle(recordsProp, vehicle?.id), [recordsProp, vehicle]);
+  const scopedHistory = useMemo(
+    () => scopeByVehicle(serviceHistoryProp, vehicle?.id),
+    [serviceHistoryProp, vehicle]
+  );
+
   // Collect all available months from fuel records and other expenses
   const availableMonths = useMemo(() => {
     const monthMap = new Map<string, string>();
-    records.forEach((r) => {
+    scopedRecords.forEach((r) => {
       if (r.date) {
         const key = r.date.slice(0, 7);
         if (!monthMap.has(key)) {
@@ -130,7 +139,7 @@ export const StatsDashboard: React.FC<Props> = ({
         }
       }
     });
-    serviceHistory.forEach((h) => {
+    scopedHistory.forEach((h) => {
       if (h.date) {
         const key = h.date.slice(0, 7);
         if (!monthMap.has(key)) {
@@ -146,18 +155,18 @@ export const StatsDashboard: React.FC<Props> = ({
     return Array.from(monthMap.entries())
       .sort((a, b) => b[0].localeCompare(a[0]))
       .map(([key, label]) => ({ key, label }));
-  }, [records, serviceHistory]);
+  }, [scopedRecords, scopedHistory]);
 
   // Data filtered by selectedPeriod for the 3 dashboard cards
   const periodFuelRecords = useMemo(() => {
-    if (selectedPeriod === "all") return records;
-    return records.filter((r) => r.date && r.date.startsWith(selectedPeriod));
-  }, [records, selectedPeriod]);
+    if (selectedPeriod === "all") return scopedRecords;
+    return scopedRecords.filter((r) => r.date && r.date.startsWith(selectedPeriod));
+  }, [scopedRecords, selectedPeriod]);
 
   const periodOtherExpenses = useMemo(() => {
-    if (selectedPeriod === "all") return serviceHistory;
-    return serviceHistory.filter((h) => h.date && h.date.startsWith(selectedPeriod));
-  }, [serviceHistory, selectedPeriod]);
+    if (selectedPeriod === "all") return scopedHistory;
+    return scopedHistory.filter((h) => h.date && h.date.startsWith(selectedPeriod));
+  }, [scopedHistory, selectedPeriod]);
 
   // Card 1: Konsumsi BBM (km/L atau unit yang dipilih)
   // Ringkasan Data SELALU rata-rata per bulan dari SELURUH data (tidak terikat filter)
@@ -165,7 +174,7 @@ export const StatsDashboard: React.FC<Props> = ({
 
   const monthlyEfficiencies = useMemo(() => {
     const byMonth = new Map<string, { dist: number; liters: number }>();
-    records.forEach((r) => {
+    scopedRecords.forEach((r) => {
       if (!r.date) return;
       const key = r.date.slice(0, 7);
       const cur = byMonth.get(key) || { dist: 0, liters: 0 };
@@ -178,9 +187,9 @@ export const StatsDashboard: React.FC<Props> = ({
       if (dist > 0 && liters > 0) effs.push(dist / liters);
     });
     return effs;
-  }, [records]);
+  }, [scopedRecords]);
 
-  const allRecordEfficiencies = records
+  const allRecordEfficiencies = scopedRecords
     .map((r) => r.fuelEfficiencyKmPerL)
     .filter((e): e is number => typeof e === "number" && e > 0);
 
@@ -194,12 +203,12 @@ export const StatsDashboard: React.FC<Props> = ({
   const displayAvgMonthlyEfficiency = formatEfficiency(rawAvgMonthlyEfficiency, fuelUnit);
 
   // Rata-rata per bulan untuk kartu biaya (total seluruh data / jumlah bulan aktif)
-  const totalFuelCostAll = records.reduce((acc, r) => acc + (r.totalCost || 0), 0);
-  const totalOtherCostAll = serviceHistory.reduce((acc, h) => acc + (h.cost || 0), 0);
+  const totalFuelCostAll = scopedRecords.reduce((acc, r) => acc + (r.totalCost || 0), 0);
+  const totalOtherCostAll = scopedHistory.reduce((acc, h) => acc + (h.cost || 0), 0);
   const avgFuelCostPerMonth = activeMonthCount > 0 ? totalFuelCostAll / activeMonthCount : 0;
   const avgOtherCostPerMonth = activeMonthCount > 0 ? totalOtherCostAll / activeMonthCount : 0;
-  const avgFuelCountPerMonth = activeMonthCount > 0 ? records.length / activeMonthCount : 0;
-  const avgOtherCountPerMonth = activeMonthCount > 0 ? serviceHistory.length / activeMonthCount : 0;
+  const avgFuelCountPerMonth = activeMonthCount > 0 ? scopedRecords.length / activeMonthCount : 0;
+  const avgOtherCountPerMonth = activeMonthCount > 0 ? scopedHistory.length / activeMonthCount : 0;
 
   const fmtPerMonth = (n: number) => {
     if (!isFinite(n) || n <= 0) return "0x/bln";
@@ -284,7 +293,7 @@ export const StatsDashboard: React.FC<Props> = ({
     }
   > = {};
 
-  const sortedChrono = [...records].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedChrono = [...scopedRecords].sort((a, b) => a.date.localeCompare(b.date));
 
   sortedChrono.forEach((r) => {
     const d = new Date(r.date);
@@ -372,8 +381,8 @@ export const StatsDashboard: React.FC<Props> = ({
     // Reference date: latest date in records/services or today
     let refDate = new Date();
     const allDates = [
-      ...records.map((r) => r.date),
-      ...serviceHistory.map((s) => s.date),
+      ...scopedRecords.map((r) => r.date),
+      ...scopedHistory.map((s) => s.date),
     ].filter((d): d is string => Boolean(d));
 
     if (allDates.length > 0) {
@@ -398,13 +407,9 @@ export const StatsDashboard: React.FC<Props> = ({
       monthSlots.push({ year: y, month: m, key, label });
     }
 
-    // Vehicle-scoped records
-    const vRecords = vehicle
-      ? records.filter((r) => !r.vehicleId || r.vehicleId === vehicle.id)
-      : records;
-    const vServices = vehicle
-      ? serviceHistory.filter((s) => !s.vehicleId || s.vehicleId === vehicle.id)
-      : serviceHistory;
+    // Sudah di-scope per kendaraan di atas
+    const vRecords = scopedRecords;
+    const vServices = scopedHistory;
 
     // Collect all records and services with odometer
     const entries: { date: string; odo: number; dist: number }[] = [];
@@ -492,7 +497,7 @@ export const StatsDashboard: React.FC<Props> = ({
     }
 
     return data;
-  }, [records, serviceHistory, vehicle]);
+  }, [scopedRecords, scopedHistory, vehicle]);
 
   // Statistics for 6-month usage patterns
   const odometer6MonthsStats = useMemo(() => {
@@ -515,19 +520,19 @@ export const StatsDashboard: React.FC<Props> = ({
   }, [odometer6MonthsData, vehicle?.currentOdometer]);
 
   // Recent 3 records for quick home feed
-  const recentRecords = [...records]
+  const recentRecords = [...scopedRecords]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 3);
 
   // Pie Chart Data: Total Persentase Jenis SPBU
   const spbuPieData = useMemo(() => {
-    if (records.length === 0) return [];
+    if (scopedRecords.length === 0) return [];
     const brandMap: Record<
       string,
       { name: string; liters: number; count: number; cost: number }
     > = {};
 
-    records.forEach((r) => {
+    scopedRecords.forEach((r) => {
       const brandKey = detectStationBrand(r.stationName, vehicle?.fuelCategory);
       const brandDisplay: Record<string, string> = {
         pertamina: "Pertamina",
@@ -566,17 +571,17 @@ export const StatsDashboard: React.FC<Props> = ({
             : 0,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [records, vehicle?.fuelCategory]);
+  }, [scopedRecords, vehicle?.fuelCategory]);
 
   // Pie Chart Data: Total Persentase Jenis Bensin
   const fuelTypePieData = useMemo(() => {
-    if (records.length === 0) return [];
+    if (scopedRecords.length === 0) return [];
     const typeMap: Record<
       string,
       { name: string; liters: number; count: number; cost: number }
     > = {};
 
-    records.forEach((r) => {
+    scopedRecords.forEach((r) => {
       const name = (r.fuelType || "Bensin").trim();
       if (!typeMap[name]) {
         typeMap[name] = { name, liters: 0, count: 0, cost: 0 };
@@ -603,7 +608,7 @@ export const StatsDashboard: React.FC<Props> = ({
             : 0,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [records]);
+  }, [scopedRecords]);
 
   const activePieData = pieChartMode === "spbu" ? spbuPieData : fuelTypePieData;
 
@@ -1495,8 +1500,8 @@ export const StatsDashboard: React.FC<Props> = ({
         selectedPeriod="all"
         periodLabel="Semua Bulan (Rata-rata/bln)"
         vehicle={vehicle}
-        fuelRecords={records}
-        maintenanceRecords={serviceHistory}
+        fuelRecords={scopedRecords}
+        maintenanceRecords={scopedHistory}
         fuelUnit={fuelUnit}
         onOpenManualEntry={handleOpenAddAction}
         onNavigateTab={onNavigateTab}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileSpreadsheet,
   FileDown,
@@ -48,10 +48,15 @@ export const ReportPage: React.FC<Props> = ({
   fuelUnit = "km/l",
   onOpenRegisterVehicle,
 }) => {
-  // Filters: Vehicle & Date Range
+  // Filters: Vehicle & Date Range (mengikuti kendaraan aktif di header)
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(
     vehicle?.id || "all"
   );
+
+  // Selalu ikuti kendaraan yang dipilih di header aplikasi
+  useEffect(() => {
+    setSelectedVehicleId(vehicle?.id || "all");
+  }, [vehicle?.id]);
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [exportMsg, setExportMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
@@ -119,8 +124,8 @@ export const ReportPage: React.FC<Props> = ({
   // 1. Filter records by vehicle and date range
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
-      // Vehicle filter
-      if (selectedVehicleId !== "all" && r.vehicleId !== selectedVehicleId) {
+      // Vehicle filter (ketat per kendaraan; data lama tanpa vehicleId ikut tampil)
+      if (selectedVehicleId !== "all" && r.vehicleId && r.vehicleId !== selectedVehicleId) {
         return false;
       }
       // Date range filter
@@ -137,8 +142,8 @@ export const ReportPage: React.FC<Props> = ({
   // 2. Filter service history by vehicle and date range
   const filteredHistory = useMemo(() => {
     return serviceHistory.filter((h) => {
-      // Vehicle filter
-      if (selectedVehicleId !== "all" && h.vehicleId !== selectedVehicleId) {
+      // Vehicle filter (ketat per kendaraan; data lama tanpa vehicleId ikut tampil)
+      if (selectedVehicleId !== "all" && h.vehicleId && h.vehicleId !== selectedVehicleId) {
         return false;
       }
       // Date range filter

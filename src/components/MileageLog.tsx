@@ -95,13 +95,11 @@ export const MileageLog: React.FC<Props> = ({
   // Support both prop names seamlessly
   const handleOpenAdd = onOpenManualAdd || onOpenManualEntry || (() => {});
 
-  // Records for active vehicle (or all if no vehicle or if active vehicle filter returns empty while records exist)
+  // Records strictly for active vehicle (incl. legacy records without vehicleId)
   const vehicleRecords = useMemo(() => {
     if (!Array.isArray(records)) return [];
     if (!vehicle) return records;
-    const matching = records.filter((r) => !r.vehicleId || r.vehicleId === vehicle.id);
-    // If user has records in total but none with exact vehicleId, show all records to prevent accidental blank state
-    return matching.length > 0 ? matching : records;
+    return records.filter((r) => !r.vehicleId || r.vehicleId === vehicle.id);
   }, [records, vehicle]);
 
   // Filter records by search query (SPBU name, notes, date, fuel type, location)
