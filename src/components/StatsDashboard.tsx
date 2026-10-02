@@ -160,27 +160,52 @@ export const StatsDashboard: React.FC<Props> = ({
   }, [serviceHistory, selectedPeriod]);
 
   // Card 1: Konsumsi BBM (km/L atau unit yang dipilih)
-  const periodEfficiencies = periodFuelRecords
+  // Ringkasan Data SELALU rata-rata per bulan dari SELURUH data (tidak terikat filter)
+  const activeMonthCount = availableMonths.length;
+
+  const monthlyEfficiencies = useMemo(() => {
+    const byMonth = new Map<string, { dist: number; liters: number }>();
+    records.forEach((r) => {
+      if (!r.date) return;
+      const key = r.date.slice(0, 7);
+      const cur = byMonth.get(key) || { dist: 0, liters: 0 };
+      cur.dist += r.distanceTraveled || 0;
+      cur.liters += r.liters || 0;
+      byMonth.set(key, cur);
+    });
+    const effs: number[] = [];
+    byMonth.forEach(({ dist, liters }) => {
+      if (dist > 0 && liters > 0) effs.push(dist / liters);
+    });
+    return effs;
+  }, [records]);
+
+  const allRecordEfficiencies = records
     .map((r) => r.fuelEfficiencyKmPerL)
     .filter((e): e is number => typeof e === "number" && e > 0);
 
-  const periodTotalDistance = periodFuelRecords.reduce(
-    (acc, r) => acc + (r.distanceTraveled || 0),
-    0
-  );
-  const periodTotalLiters = periodFuelRecords.reduce(
-    (acc, r) => acc + (r.liters || 0),
-    0
-  );
-
-  const rawPeriodAvgEfficiency =
-    periodTotalDistance > 0 && periodTotalLiters > 0
-      ? periodTotalDistance / periodTotalLiters
-      : periodEfficiencies.length > 0
-      ? periodEfficiencies.reduce((a, b) => a + b, 0) / periodEfficiencies.length
+  const rawAvgMonthlyEfficiency =
+    monthlyEfficiencies.length > 0
+      ? monthlyEfficiencies.reduce((a, b) => a + b, 0) / monthlyEfficiencies.length
+      : allRecordEfficiencies.length > 0
+      ? allRecordEfficiencies.reduce((a, b) => a + b, 0) / allRecordEfficiencies.length
       : 0;
 
-  const displayPeriodEfficiency = formatEfficiency(rawPeriodAvgEfficiency, fuelUnit);
+  const displayAvgMonthlyEfficiency = formatEfficiency(rawAvgMonthlyEfficiency, fuelUnit);
+
+  // Rata-rata per bulan untuk kartu biaya (total seluruh data / jumlah bulan aktif)
+  const totalFuelCostAll = records.reduce((acc, r) => acc + (r.totalCost || 0), 0);
+  const totalOtherCostAll = serviceHistory.reduce((acc, h) => acc + (h.cost || 0), 0);
+  const avgFuelCostPerMonth = activeMonthCount > 0 ? totalFuelCostAll / activeMonthCount : 0;
+  const avgOtherCostPerMonth = activeMonthCount > 0 ? totalOtherCostAll / activeMonthCount : 0;
+  const avgFuelCountPerMonth = activeMonthCount > 0 ? records.length / activeMonthCount : 0;
+  const avgOtherCountPerMonth = activeMonthCount > 0 ? serviceHistory.length / activeMonthCount : 0;
+
+  const fmtPerMonth = (n: number) => {
+    if (!isFinite(n) || n <= 0) return "0x/bln";
+    const v = Math.round(n * 10) / 10;
+    return `${Number.isInteger(v) ? String(v) : String(v).replace(".", ",")}x/bln`;
+  };
 
   // Card 2: Biaya Bensin
   const periodFuelCost = periodFuelRecords.reduce(
@@ -619,36 +644,14 @@ export const StatsDashboard: React.FC<Props> = ({
         </div>
       )}
 
-      {/* 2. Key Metrics Header & Period Filter */}
+      {/* 2. Key Metrics Header (rata-rata per bulan, tidak terikat filter) */}
       <div className="space-y-2.5">
-        <div className="flex items-center justify-between gap-2 px-1">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-blue-500" />
-            <span>Ringkasan Data</span>
-          </div>
-
-          {/* Period Selector: Specific Month or Total of All Months */}
-          <div className="flex items-center gap-1.5">
-            <label
-              htmlFor="dashboard-period-select"
-              className="text-[11px] text-slate-500 dark:text-slate-400 hidden xs:inline"
-            >
-              Periode:
-            </label>
-            <select
-              id="dashboard-period-select"
-              value={selectedPeriod}
-              onChange={(e) => setSelectedPeriod(e.target.value)}
-              className="bg-white dark:bg-[#151c2c] border border-slate-200 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 shadow-2xs cursor-pointer"
-            >
-              <option value="all">Semua Bulan (Total)</option>
-              {availableMonths.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+          <Calendar className="w-3.5 h-3.5 text-blue-500" />
+          <span>Ringkasan Data</span>
+          <span className="ml-auto text-[10px] font-medium text-slate-400">
+            Rata-rata per bulan
+          </span>
         </div>
 
         {/* 3 KPI Cards: Konsumsi BBM, Biaya Bensin, Biaya Lainnya (Clickable to open Bottom Sheet) */}
@@ -669,15 +672,15 @@ export const StatsDashboard: React.FC<Props> = ({
             <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div className="flex items-baseline gap-0.5 sm:gap-1 text-slate-900 dark:text-white font-bold tracking-tight min-w-0">
                 <span className="text-xs sm:text-base md:text-lg font-bold truncate">
-                  {displayPeriodEfficiency.value}
+                  {displayAvgMonthlyEfficiency.value}
                 </span>
                 <span className="text-[9px] sm:text-[10px] md:text-xs font-normal text-slate-500 dark:text-slate-400 shrink-0">
-                  {displayPeriodEfficiency.unitLabel}
+                  {displayAvgMonthlyEfficiency.unitLabel}
                 </span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium truncate">
-                  {selectedPeriod === "all" ? "Rata-rata total" : "Bulan terpilih"}
+                  Rata-rata per bulan
                 </span>
                 <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
                   Rincian &rarr;
@@ -702,20 +705,20 @@ export const StatsDashboard: React.FC<Props> = ({
             <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div
                 className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
-                  Math.round(periodFuelCost).toLocaleString("id-ID")
+                  Math.round(avgFuelCostPerMonth).toLocaleString("id-ID")
                 )}`}
-                title={formatRupiah(periodFuelCost)}
+                title={formatRupiah(avgFuelCostPerMonth)}
               >
                 <span className="text-[10px] sm:text-xs font-medium text-slate-400 dark:text-slate-500 shrink-0">
                   Rp
                 </span>
                 <span className="truncate">
-                  {Math.round(periodFuelCost).toLocaleString("id-ID")}
+                  {Math.round(avgFuelCostPerMonth).toLocaleString("id-ID")}
                 </span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                  {periodFuelCount}x pengisian
+                  {fmtPerMonth(avgFuelCountPerMonth)}
                 </span>
                 <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
                   Rincian &rarr;
@@ -740,20 +743,20 @@ export const StatsDashboard: React.FC<Props> = ({
             <div className="mt-1.5 sm:mt-2 min-w-0 w-full">
               <div
                 className={`font-bold tracking-tight text-slate-900 dark:text-white flex items-baseline gap-0.5 min-w-0 ${getNominalSizeClass(
-                  Math.round(periodOtherCost).toLocaleString("id-ID")
+                  Math.round(avgOtherCostPerMonth).toLocaleString("id-ID")
                 )}`}
-                title={formatRupiah(periodOtherCost)}
+                title={formatRupiah(avgOtherCostPerMonth)}
               >
                 <span className="text-[10px] sm:text-xs font-medium text-slate-400 dark:text-slate-500 shrink-0">
                   Rp
                 </span>
                 <span className="truncate">
-                  {Math.round(periodOtherCost).toLocaleString("id-ID")}
+                  {Math.round(avgOtherCostPerMonth).toLocaleString("id-ID")}
                 </span>
               </div>
               <div className="flex items-center justify-between mt-0.5">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
-                  {periodOtherCount} transaksi
+                  {fmtPerMonth(avgOtherCountPerMonth)}
                 </span>
                 <span className="text-[9px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline">
                   Rincian &rarr;
@@ -761,6 +764,29 @@ export const StatsDashboard: React.FC<Props> = ({
               </div>
             </div>
           </button>
+        </div>
+
+        {/* Period Filter: di bawah kartu, mengatur bagian di bawahnya */}
+        <div className="flex items-center justify-end gap-1.5 px-1">
+          <label
+            htmlFor="dashboard-period-select"
+            className="text-[11px] text-slate-500 dark:text-slate-400"
+          >
+            Periode:
+          </label>
+          <select
+            id="dashboard-period-select"
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            className="bg-white dark:bg-[#151c2c] border border-slate-200 dark:border-slate-700/80 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 shadow-2xs cursor-pointer"
+          >
+            <option value="all">Semua Bulan (Total)</option>
+            {availableMonths.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Ringkasan Rincian Biaya Kendaraan (Dipindahkan dari Halaman Biaya, Terfilter Periode) */}
@@ -1461,20 +1487,16 @@ export const StatsDashboard: React.FC<Props> = ({
         )}
       </div>
 
-      {/* Bottom Sheet Detail for the 3 Cards (Konsumsi BBM, Biaya Bensin, Biaya Lainnya) */}
+      {/* Bottom Sheet Detail for the 3 Cards (selalu seluruh data, rata-rata/bln) */}
       <DashboardCardBottomSheet
         isOpen={!!activeSheetCard}
         cardType={activeSheetCard}
         onClose={() => setActiveSheetCard(null)}
-        selectedPeriod={selectedPeriod}
-        periodLabel={
-          selectedPeriod === "all"
-            ? "Semua Bulan (Total)"
-            : availableMonths.find((m) => m.key === selectedPeriod)?.label || selectedPeriod
-        }
+        selectedPeriod="all"
+        periodLabel="Semua Bulan (Rata-rata/bln)"
         vehicle={vehicle}
-        fuelRecords={periodFuelRecords}
-        maintenanceRecords={periodOtherExpenses}
+        fuelRecords={records}
+        maintenanceRecords={serviceHistory}
         fuelUnit={fuelUnit}
         onOpenManualEntry={handleOpenAddAction}
         onNavigateTab={onNavigateTab}
