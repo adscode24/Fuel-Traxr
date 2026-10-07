@@ -78,7 +78,13 @@ export async function getNotificationPermissionStatus(): Promise<string> {
   return "unavailable";
 }
 
-/** Minta izin notifikasi ke sistem (memunculkan dialog Android / browser). */
+/**
+ * Minta izin notifikasi.
+ * PENTING (web): Notification.requestPermission() WAJIB dipanggil langsung
+ * di dalam user gesture (klik), tanpa await sebelumnya, jika tidak browser
+ * akan menolak secara diam-diam. Karena itu fungsi ini tidak melakukan await
+ * apa pun sebelum memanggil requestPermission().
+ */
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (isNativePlatform()) {
     try {
@@ -91,6 +97,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   if (hasWebNotificationSupport()) {
     try {
       if (Notification.permission === "granted") return true;
+      // Dipanggil langsung (synchronous call) agar tetap dalam user gesture.
       const result = await Notification.requestPermission();
       return result === "granted";
     } catch {
@@ -131,18 +138,37 @@ async function clearPendingServiceNotifications() {
   }
 }
 
+/** Tunggu SW benar-benar aktif (dibatasi waktu agar tidak menggantung). */
+async function waitForActiveServiceWorker(timeoutMs = 4000): Promise<ServiceWorkerRegistration | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const reg = await getServiceWorkerRegistration();
+    if (reg) {
+      // SW harus punya worker aktif agar showNotification() ter-hoist
+      if (reg.active) return reg;
+      try {
+        await navigator.serviceWorker.ready;
+        return reg;
+      } catch {
+        return reg;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
+}
+
 /** Tampilkan notifikasi web lewat Service Worker, atau API langsung sebagai cadangan. */
 async function showWebNotification(title: string, body: string): Promise<boolean> {
-  const reg = await getServiceWorkerRegistration();
   const options: NotificationOptions = {
     body,
     icon: "/pwa-192x192.png",
     badge: "/pwa-192x192.png",
     tag: "digifuel-service",
-    renotify: true,
-    // keep untuk tetap tampil meski app tidak terbuka
-    requireInteraction: false,
   } as NotificationOptions;
+
+  // Jalur utama: Service Worker (tetap tampil walau tab tidak terbuka)
+  const reg = await waitForActiveServiceWorker();
   if (reg) {
     try {
       await reg.showNotification(title, options);
@@ -151,7 +177,10 @@ async function showWebNotification(title: string, body: string): Promise<boolean
       // jatuh ke API langsung
     }
   }
+
+  // Cadangan: API Notification langsung (hanya tampil saat tab fokus)
   try {
+    if (typeof Notification === "undefined") return false;
     new Notification(title, options);
     return true;
   } catch {

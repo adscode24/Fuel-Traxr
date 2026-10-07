@@ -181,6 +181,13 @@ export const SettingsPage: React.FC<Props> = ({
 
   const handleTestNotify = async () => {
     if (notifyBusy) return;
+    // Izin harus diminta dari user gesture (klik) -> jangan setBusy dulu.
+    const grantedNow = await ensureNotificationPermission();
+    if (grantedNow) {
+      setNotifyPerm("granted");
+      setServiceNotifyEnabled(true);
+      setNotifyEnabled(true);
+    }
     setNotifyBusy(true);
     try {
       const ok = await sendTestNotification();
