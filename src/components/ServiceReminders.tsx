@@ -16,6 +16,7 @@ import {
   FileText,
 } from "lucide-react";
 import { Vehicle, ServiceItem, ServiceHistoryEntry } from "../types";
+import { BottomSheet } from "./BottomSheet";
 
 interface Props {
   vehicle: Vehicle;
@@ -521,8 +522,8 @@ export const ServiceReminders: React.FC<Props> = ({
 
       {/* Modal: Mark Service Schedule As Done */}
       {markingDoneItem && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#151c2b] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+        <BottomSheet isOpen onClose={() => setMarkingDoneItem(null)} id="svc_mark_done" maxWidth="max-w-md">
+          <div className="p-5 space-y-4 overflow-y-auto">
             <div>
               <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">
                 <CheckCircle2 className="w-4 h-4" />
@@ -625,13 +626,13 @@ export const ServiceReminders: React.FC<Props> = ({
               </div>
             </form>
           </div>
-        </div>
+        </BottomSheet>
       )}
 
       {/* Modal: Add Manual Service History */}
       {showAddHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#151c2b] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+        <BottomSheet isOpen onClose={() => setShowAddHistoryModal(false)} id="svc_add_history" maxWidth="max-w-md">
+          <div className="p-5 space-y-4 overflow-y-auto">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               Catat Riwayat Servis yang Pernah Dilakukan
             </h3>
@@ -759,13 +760,13 @@ export const ServiceReminders: React.FC<Props> = ({
               </div>
             </form>
           </div>
-        </div>
+        </BottomSheet>
       )}
 
       {/* Modal: Add Service Schedule */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#151c2b] border border-slate-200 dark:border-slate-700 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl">
+        <BottomSheet isOpen onClose={() => setShowAddModal(false)} id="svc_add_schedule" maxWidth="max-w-md">
+          <div className="p-5 space-y-4 overflow-y-auto">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
               Tambah Pengingat Servis Berkala
             </h3>
@@ -864,7 +865,7 @@ export const ServiceReminders: React.FC<Props> = ({
               </div>
             </form>
           </div>
-        </div>
+        </BottomSheet>
       )}
     </div>
   );

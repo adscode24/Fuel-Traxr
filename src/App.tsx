@@ -50,6 +50,7 @@ import { UserProfileModal } from "./components/UserProfileModal";
 import { OfflineIndicator } from "./components/OfflineIndicator";
 import { PullToRefresh } from "./components/PullToRefresh";
 import { maybeNotifyServiceDue } from "./services/reminderNotifications";
+import { scopeByVehicle } from "./utils/vehicleScope";
 
 export function App() {
   // Auth state & loading
@@ -421,7 +422,8 @@ export function App() {
 
   // Penjadwalan notifikasi servis native (anti-spam 1x/hari di dalam service)
   useEffect(() => {
-    void maybeNotifyServiceDue(services, activeVehicle?.currentOdometer || 0);
+    const scoped = scopeByVehicle<ServiceItem>(services, activeVehicle?.id);
+    void maybeNotifyServiceDue(scoped, activeVehicle?.currentOdometer || 0);
   }, [services, activeVehicle]);
 
   // If vehicle was deleted or activeVehicleId is invalid, reset to first vehicle
@@ -786,6 +788,24 @@ export function App() {
             }}
             onDeleteExpense={handleDeleteServiceHistory}
             onOpenRegisterVehicle={() => setIsVehicleModalOpen(true)}
+            services={services}
+            onAddService={(item) =>
+              handleSaveServiceItem({
+                ...item,
+                id: `svc-${Date.now()}`,
+                vehicleId: activeVehicle?.id,
+              } as ServiceItem)
+            }
+            onUpdateService={handleSaveServiceItem}
+            onDeleteService={handleDeleteServiceItem}
+            onAddServiceHistory={(entry) =>
+              handleSaveServiceHistory({
+                ...entry,
+                id: `exp-${Date.now()}`,
+                createdAt: new Date().toISOString(),
+              } as ServiceHistoryEntry)
+            }
+            onDeleteServiceHistory={handleDeleteServiceHistory}
           />
         )}
 

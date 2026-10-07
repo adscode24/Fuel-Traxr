@@ -18,28 +18,80 @@ import {
   ChevronDown,
   Sparkles,
 } from "lucide-react";
-import { Vehicle, ServiceHistoryEntry, ExpenseCategory } from "../types";
+import { Vehicle, ServiceHistoryEntry, ExpenseCategory, ServiceItem } from "../types";
 import { ExpenseEntryModal } from "./ExpenseEntryModal";
+import { ServiceReminders } from "./ServiceReminders";
 
 interface Props {
   vehicle: Vehicle | null;
   serviceHistory: ServiceHistoryEntry[];
+  services?: ServiceItem[];
   onAddExpense?: (
     entry: Omit<ServiceHistoryEntry, "id" | "createdAt">
   ) => void;
   onSaveExpense?: (entry: ServiceHistoryEntry) => void;
   onDeleteExpense: (id: string) => void;
   onOpenRegisterVehicle?: () => void;
+  // Handler jadwal servis (opsional — halaman servis akan disembunyikan bila kosong)
+  onAddService?: (item: Omit<ServiceItem, "id">) => void;
+  onUpdateService?: (item: ServiceItem) => void;
+  onDeleteService?: (id: string) => void;
+  onAddServiceHistory?: (
+    entry: Omit<ServiceHistoryEntry, "id" | "createdAt">
+  ) => void;
+  onDeleteServiceHistory?: (id: string) => void;
 }
+
+type PageView = "biaya" | "servis";
+
+/** Pemindah tampilan utama di halaman Biaya: Buku Biaya vs Jadwal Servis. */
+const PageViewSwitcher: React.FC<{
+  value: PageView;
+  onChange: (v: PageView) => void;
+}> = ({ value, onChange }) => (
+  <div className="grid grid-cols-2 gap-1.5 p-1.5 bg-white dark:bg-[#151c2a] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+    <button
+      type="button"
+      onClick={() => onChange("biaya")}
+      className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${
+        value === "biaya"
+          ? "bg-blue-600 text-white shadow-xs"
+          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+      }`}
+    >
+      <Wallet className="w-4 h-4" />
+      <span>Buku Biaya</span>
+    </button>
+    <button
+      type="button"
+      onClick={() => onChange("servis")}
+      className={`flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition ${
+        value === "servis"
+          ? "bg-blue-600 text-white shadow-xs"
+          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+      }`}
+    >
+      <Wrench className="w-4 h-4" />
+      <span>Jadwal Servis</span>
+    </button>
+  </div>
+);
 
 export const BiayaPage: React.FC<Props> = ({
   vehicle,
   serviceHistory = [],
+  services,
   onAddExpense,
   onSaveExpense,
   onDeleteExpense,
   onOpenRegisterVehicle,
+  onAddService,
+  onUpdateService,
+  onDeleteService,
+  onAddServiceHistory,
+  onDeleteServiceHistory,
 }) => {
+  const [pageView, setPageView] = useState<PageView>("biaya");
   const [activeFilter, setActiveFilter] = useState<string>("Semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -317,8 +369,44 @@ export const BiayaPage: React.FC<Props> = ({
     );
   }
 
+  const showServisView =
+    pageView === "servis" &&
+    !!vehicle &&
+    !!onAddService &&
+    !!onUpdateService &&
+    !!onDeleteService &&
+    !!onAddServiceHistory &&
+    !!onDeleteServiceHistory;
+
+  const vehicleServices = useMemo(() => {
+    if (!Array.isArray(services)) return [];
+    if (!vehicle) return services;
+    return services.filter((s) => !s.vehicleId || s.vehicleId === vehicle.id);
+  }, [services, vehicle]);
+
+  if (showServisView && vehicle) {
+    return (
+      <div className="space-y-4 pb-28 text-slate-800 dark:text-slate-100 transition-colors">
+        <PageViewSwitcher value={pageView} onChange={setPageView} />
+
+        <ServiceReminders
+          vehicle={vehicle}
+          services={vehicleServices}
+          serviceHistory={vehicleExpenses}
+          onAddService={onAddService!}
+          onUpdateService={onUpdateService!}
+          onDeleteService={onDeleteService!}
+          onAddServiceHistory={onAddServiceHistory!}
+          onDeleteServiceHistory={onDeleteServiceHistory!}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 pb-28 text-slate-800 dark:text-slate-100 transition-colors">
+      <PageViewSwitcher value={pageView} onChange={setPageView} />
+
       {/* Dedicated Expense Page Header */}
       <div className="bg-white dark:bg-[#151c2a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
