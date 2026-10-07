@@ -29,7 +29,11 @@ import {
   pushVault,
   pullVault,
   subscribeVault,
+  listVaultVersions,
+  getVaultVersion,
   CloudSyncError,
+  type VaultVersionMeta,
+  type VaultPayload as VaultPayloadForRestore,
 } from "./services/cloudSync";
 import { useOnlineStatus } from "./hooks/useOnlineStatus";
 
@@ -120,6 +124,36 @@ export function App() {
     }
   });
   const [cloudNewerAvailable, setCloudNewerAvailable] = useState(false);
+  // Riwayat versi vault (untuk memulihkan data yang tertimpa)
+  const [versions, setVersions] = useState<VaultVersionMeta[]>([]);
+  const [versionsBusy, setVersionsBusy] = useState(false);
+  const [restoreBusyId, setRestoreBusyId] = useState<string | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState<VaultVersionMeta | null>(null);
+  const [versionsMsg, setVersionsMsg] = useState<string | null>(null);
+
+  const applyVaultPayload = useCallback(
+    (payload: VaultPayloadForRestore, uid: string) => {
+      applyingCloudRef.current = true;
+      justAppliedRef.current = true;
+      setVehicles(payload.vehicles);
+      saveStoredVehicles(payload.vehicles, uid);
+      setActiveVehicleId((prev) => {
+        if (prev && payload.vehicles.some((v) => v.id === prev)) return prev;
+        return payload.vehicles[0]?.id || "";
+      });
+      const calc = recalculateRecords(payload.fuelRecords);
+      setRecords(calc);
+      saveStoredFuelRecords(calc, uid);
+      setServices(payload.services);
+      saveStoredServices(payload.services, uid);
+      setServiceHistory(payload.serviceHistory);
+      saveStoredServiceHistory(payload.serviceHistory, uid);
+      setTimeout(() => {
+        applyingCloudRef.current = false;
+      }, 0);
+    },
+    []
+  );
   const lastPulledAtKey = "digifuel_last_pulled_at";
   const getLastPulledAt = () => {
     try {
@@ -482,6 +516,48 @@ export function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  const handleLoadVersions = useCallback(async () => {
+    if (!user || !isCloudCapableUid(user.uid)) return;
+    setVersionsBusy(true);
+    setVersionsMsg(null);
+    try {
+      const list = await listVaultVersions(user);
+      setVersions(list);
+      if (list.length === 0) {
+        setVersionsMsg("Belum ada versi tersimpan. Versi tersimpan otomatis setiap kamu Upload ke Cloud.");
+      }
+    } catch (err: unknown) {
+      setVersionsMsg((err as Error)?.message || "Gagal memuat riwayat versi.");
+    } finally {
+      setVersionsBusy(false);
+    }
+  }, [user]);
+
+  const handleRestoreVersion = useCallback(
+    async (version: VaultVersionMeta) => {
+      if (!user || !isCloudCapableUid(user.uid)) return;
+      setRestoreBusyId(version.id);
+      setRestoreConfirm(null);
+      try {
+        const payload = await getVaultVersion(user, version.id);
+        if (!payload) {
+          setVersionsMsg("Isi versi tidak ditemukan.");
+          return;
+        }
+        applyVaultPayload(payload, user.uid);
+        setVersionsMsg(
+          `Data dipulihkan dari versi ${new Date(version.snapshotAt || version.createdAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}.`
+        );
+        showToast("Data berhasil dipulihkan dari riwayat versi.");
+      } catch (err: unknown) {
+        setVersionsMsg((err as Error)?.message || "Gagal memulihkan versi.");
+      } finally {
+        setRestoreBusyId(null);
+      }
+    },
+    [user, applyVaultPayload, showToast]
+  );
 
   const handleToggleAutoUpload = useCallback((next: boolean) => {
     setAutoUpload(next);
@@ -959,6 +1035,12 @@ export function App() {
             autoUpload={autoUpload}
             onToggleAutoUpload={handleToggleAutoUpload}
             cloudNewerAvailable={cloudNewerAvailable}
+            versions={versions}
+            onLoadVersions={handleLoadVersions}
+            onRestoreVersion={handleRestoreVersion}
+            versionsBusy={versionsBusy}
+            restoreBusyId={restoreBusyId}
+            versionsMsg={versionsMsg}
           />
         )}
         </PullToRefresh>

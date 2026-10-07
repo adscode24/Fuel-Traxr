@@ -61,6 +61,25 @@ interface Props {
   autoUpload?: boolean;
   onToggleAutoUpload?: (next: boolean) => void;
   cloudNewerAvailable?: boolean;
+  // Riwayat versi
+  versions?: {
+    id: string;
+    createdAt: string;
+    snapshotAt: string;
+    vehicles: number;
+    fuelRecords: number;
+    services: number;
+    serviceHistory: number;
+  }[];
+  onLoadVersions?: () => void;
+  onRestoreVersion?: (v: {
+    id: string;
+    snapshotAt: string;
+    createdAt: string;
+  }) => void;
+  versionsBusy?: boolean;
+  restoreBusyId?: string | null;
+  versionsMsg?: string | null;
 }
 
 export const SettingsPage: React.FC<Props> = ({
@@ -87,6 +106,12 @@ export const SettingsPage: React.FC<Props> = ({
   autoUpload = false,
   onToggleAutoUpload,
   cloudNewerAvailable = false,
+  versions = [],
+  onLoadVersions,
+  onRestoreVersion,
+  versionsBusy = false,
+  restoreBusyId = null,
+  versionsMsg = null,
 }) => {
   const { theme, setTheme } = useTheme();
   const { isInstalled } = usePWAInstall();
@@ -361,6 +386,68 @@ export const SettingsPage: React.FC<Props> = ({
                 Aktifkan Cloud Vault Saya
               </button>
             )}
+          </div>
+        )}
+
+        {/* Riwayat Versi Data */}
+        {onLoadVersions && (
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                Riwayat Versi Data
+              </div>
+              <button
+                type="button"
+                onClick={onLoadVersions}
+                disabled={versionsBusy}
+                className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 transition cursor-pointer disabled:opacity-60"
+              >
+                {versionsBusy ? "Memuat…" : "Muat Riwayat"}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              Setiap kali kamu <b>Upload ke Cloud</b>, data cloud sebelumnya otomatis
+              disimpan sebagai versi. Kalau salah upload, pulihkan dari sini (maks 20
+              versi terakhir).
+            </p>
+
+            {versionsMsg && (
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{versionsMsg}</p>
+            )}
+
+            <div className="space-y-1.5 max-h-56 overflow-y-auto">
+              {versions.map((v) => (
+                <div
+                  key={v.id}
+                  className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white dark:bg-[#182133] border border-slate-200 dark:border-slate-700/70"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 truncate">
+                      {new Date(v.snapshotAt || v.createdAt).toLocaleString("id-ID", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                      {v.vehicles} kendaraan • {v.fuelRecords} isi BBM • {v.serviceHistory} biaya
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRestoreVersion?.(v)}
+                    disabled={restoreBusyId === v.id}
+                    className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer disabled:opacity-60 shrink-0"
+                  >
+                    {restoreBusyId === v.id ? "…" : "Pulihkan"}
+                  </button>
+                </div>
+              ))}
+              {versions.length === 0 && !versionsBusy && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center py-2">
+                  Belum ada versi. Tekan “Muat Riwayat” untuk mengecek.
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

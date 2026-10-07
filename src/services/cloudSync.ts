@@ -1,4 +1,17 @@
-import { doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  onSnapshot,
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  deleteDoc,
+} from "firebase/firestore";
 import type { User } from "firebase/auth";
 import type {
   Vehicle,
@@ -9,7 +22,21 @@ import type {
 import { db } from "./firebase";
 
 export const VAULT_COLLECTION = "fuelVaults";
+export const VAULT_VERSIONS_COLLECTION = "fuelVaultVersions";
 export const VAULT_SCHEMA_VERSION = 2;
+export const MAX_VAULT_VERSIONS = 20; // 20 versi terakhir per akun
+
+export interface VaultVersionMeta {
+  id: string;
+  /** updatedAt dari vault saat snapshot diambil ( kapan datanya dibuat) */
+  createdAt: string;
+  /** kapan snapshot ini disimpan (kapan ditimpa) */
+  snapshotAt: string;
+  vehicles: number;
+  fuelRecords: number;
+  services: number;
+  serviceHistory: number;
+}
 
 export interface VaultPayload {
   vehicles: Vehicle[];
@@ -172,13 +199,107 @@ export async function ensureUserVault(
   }
 }
 
-/** Dorong seluruh state lokal ke cloud (last-write-wins per vault). */
+function countsOf(v: VaultPayload) {
+  return {
+    vehicles: v.vehicles.length,
+    fuelRecords: v.fuelRecords.length,
+    services: v.services.length,
+    serviceHistory: v.serviceHistory.length,
+  };
+}
+
+/**
+ * Simpan snapshot vault saat ini ke koleksi versi SEBELUM ditimpa.
+ * Ini yang membuat data lama bisa dipulihkan (kebalikan dari "ketimpa permanen").
+ */
+async function snapshotCurrentVault(user: User): Promise<void> {
+  try {
+    const snap = await getDoc(vaultDocRef(user.uid));
+    if (!snap.exists()) return; // belum ada data -> tidak ada yang perlu disimpan
+    const data = snap.data() as Partial<CloudVault>;
+    const payload: VaultPayload = {
+      vehicles: (data.vehicles as Vehicle[]) ?? [],
+      fuelRecords: (data.fuelRecords as FuelRecord[]) ?? [],
+      services: (data.services as ServiceItem[]) ?? [],
+      serviceHistory: (data.serviceHistory as ServiceHistoryEntry[]) ?? [],
+    };
+    // Jangan snapshot vault kosong (mis. sebelum data pertama masuk).
+    const c = countsOf(payload);
+    if (c.vehicles + c.fuelRecords + c.serviceHistory === 0) return;
+
+    await addDoc(collection(db, VAULT_VERSIONS_COLLECTION), {
+      uid: user.uid,
+      createdAt: data.updatedAt || new Date().toISOString(),
+      snapshotAt: new Date().toISOString(),
+      vault: sanitizeForFirestore(payload),
+      ...c,
+    });
+
+    // Bersihkan versi lama agar tidak membengkak
+    const old = await getDocs(
+      query(
+        collection(db, VAULT_VERSIONS_COLLECTION),
+        where("uid", "==", user.uid),
+        orderBy("snapshotAt", "desc")
+      )
+    );
+    const docs = old.docs;
+    const toRemove = docs.slice(MAX_VAULT_VERSIONS);
+    await Promise.all(toRemove.map((d) => deleteDoc(d.ref).catch(() => undefined)));
+  } catch (err) {
+    // Riwayat versi tidak boleh menggagalkan upload utama.
+    console.warn("Gagal menyimpan riwayat versi:", err);
+  }
+}
+
+/** Daftar versi vault tersimpan (terbaru dulu). */
+export async function listVaultVersions(user: User): Promise<VaultVersionMeta[]> {
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, VAULT_VERSIONS_COLLECTION),
+        where("uid", "==", user.uid),
+        orderBy("snapshotAt", "desc"),
+        limit(MAX_VAULT_VERSIONS)
+      )
+    );
+    return snap.docs.map((d) => {
+      const data = d.data() as Record<string, unknown>;
+      return {
+        id: d.id,
+        createdAt: (data.createdAt as string) || (data.snapshotAt as string) || "",
+        snapshotAt: (data.snapshotAt as string) || "",
+        vehicles: Number(data.vehicles) || 0,
+        fuelRecords: Number(data.fuelRecords) || 0,
+        services: Number(data.services) || 0,
+        serviceHistory: Number(data.serviceHistory) || 0,
+      };
+    });
+  } catch (err) {
+    throw toFriendlyError(err);
+  }
+}
+
+/** Ambil isi penuh satu versi (untuk dipulihkan ke perangkat). */
+export async function getVaultVersion(user: User, versionId: string): Promise<VaultPayload | null> {
+  try {
+    const snap = await getDoc(doc(db, VAULT_VERSIONS_COLLECTION, versionId));
+    if (!snap.exists()) return null;
+    const data = snap.data() as { vault?: VaultPayload };
+    return data.vault ?? null;
+  } catch (err) {
+    throw toFriendlyError(err);
+  }
+}
+
+/** Dorong seluruh state lokal ke cloud (menyimpan versi lama lebih dulu). */
 export async function pushVault(
   user: User,
   vaultCode: string,
   payload: VaultPayload
 ): Promise<string> {
   try {
+    await snapshotCurrentVault(user);
     const updatedAt = new Date().toISOString();
     await setDoc(
       vaultDocRef(user.uid),
