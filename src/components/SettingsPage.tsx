@@ -31,6 +31,7 @@ import {
   getServiceNotifyEnabled,
   setServiceNotifyEnabled,
   getNotificationPermissionStatus,
+  getNotificationPlatform,
   ensureNotificationPermission,
   cancelServiceNotifications,
   sendTestNotification,
@@ -122,15 +123,28 @@ export const SettingsPage: React.FC<Props> = ({
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
 
-  // Notifikasi pengingat servis (native)
+  // Notifikasi pengingat servis (native Android/iOS + web/PWA/desktop)
   const [notifyEnabled, setNotifyEnabled] = useState(() => getServiceNotifyEnabled());
   const [notifyPerm, setNotifyPerm] = useState<string>("...");
+  const [notifyPlatform, setNotifyPlatform] = useState<"native" | "web" | "unsupported">("native");
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    getNotificationPlatform()
+      .then(setNotifyPlatform)
+      .catch(() => setNotifyPlatform("unsupported"));
     getNotificationPermissionStatus().then(setNotifyPerm).catch(() => setNotifyPerm("prompt"));
   }, []);
+
+  const notifyPlatformLabel =
+    notifyPlatform === "native"
+      ? "Android/iOS"
+      : notifyPlatform === "web"
+      ? isInstalled
+        ? "PWA"
+        : "Web / Desktop"
+      : "tidak didukung";
 
   const handleToggleNotify = async () => {
     if (notifyBusy) return;
@@ -153,7 +167,11 @@ export const SettingsPage: React.FC<Props> = ({
       } else {
         setServiceNotifyEnabled(false);
         setNotifyEnabled(false);
-        setNotifyMsg("Izin ditolak. Aktifkan via Pengaturan HP → Aplikasi → DigiFuel → Notifikasi.");
+        setNotifyMsg(
+          notifyPlatform === "native"
+            ? "Izin ditolak. Aktifkan via Pengaturan HP → Aplikasi → DigiFuel → Notifikasi."
+            : "Izin ditolak. Aktifkan notifikasi lewat ikon gembok di address bar browser."
+        );
       }
     } finally {
       setNotifyBusy(false);
@@ -167,7 +185,15 @@ export const SettingsPage: React.FC<Props> = ({
     try {
       const ok = await sendTestNotification();
       setNotifyPerm(await getNotificationPermissionStatus().catch(() => notifyPerm));
-      setNotifyMsg(ok ? "Notifikasi tes dikirim — muncul ~3 detik lagi." : "Gagal. Pastikan izin notifikasi diaktifkan.");
+      setNotifyMsg(
+        ok
+          ? notifyPlatform === "native"
+            ? "Notifikasi tes dikirim — muncul ~3 detik lagi."
+            : "Notifikasi tes dikirim."
+          : notifyPlatform === "unsupported"
+          ? "Browser ini tidak mendukung notifikasi. Gunakan Chrome/Edge/desktop atau aplikasi Android."
+          : "Gagal. Pastikan izin notifikasi sudah diizinkan."
+      );
     } finally {
       setNotifyBusy(false);
       setTimeout(() => setNotifyMsg(null), 4000);
@@ -799,6 +825,7 @@ export const SettingsPage: React.FC<Props> = ({
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Izin sistem: {notifyPerm === "granted" ? "diizinkan" : notifyPerm === "denied" ? "ditolak" : notifyPerm}
+                {" · "}Perangkat: {notifyPlatformLabel}
               </p>
             </div>
           </div>

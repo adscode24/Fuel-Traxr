@@ -1,6 +1,8 @@
 /**
- * Notifikasi pengingat servis native (Android/iOS via @capacitor/local-notifications).
- * Web/PWA: no-op aman (tidak ada notifikasi sistem, banner dalam aplikasi tetap jalan).
+ * Notifikasi pengingat servis — mendukung SEMUA platform:
+ * - Android/iOS native (Capacitor): @capacitor/local-notifications.
+ * - Desktop & PWA/web: Web Notification API + Service Worker (butuh izin,
+ *   tidak ada di iOS Safari PWA karena limitations browser).
  */
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { isNativePlatform } from "./firebase";
@@ -8,6 +10,7 @@ import type { ServiceItem } from "../types";
 
 const SETTING_KEY = "digifuel_notify_service";
 const LAST_SENT_KEY = "digifuel_notify_service_last";
+const CHANNEL_ID = "digifuel-service";
 
 export function getServiceNotifyEnabled(): boolean {
   try {
@@ -26,31 +29,79 @@ export function setServiceNotifyEnabled(enabled: boolean) {
   }
 }
 
-/** Status izin notifikasi sistem: "granted" | "denied" | "prompt" | "unavailable". */
-export async function getNotificationPermissionStatus(): Promise<string> {
-  if (!isNativePlatform()) return "unavailable";
+/** Web Notification API tersedia? (desktop + PWA, bukan iOS Safari PWA) */
+function hasWebNotificationSupport(): boolean {
   try {
-    const r = await LocalNotifications.checkPermissions();
-    return r.display || "prompt";
-  } catch {
-    return "prompt";
-  }
-}
-
-/** Minta izin notifikasi ke sistem (memunculkan dialog Android). */
-export async function ensureNotificationPermission(): Promise<boolean> {
-  if (!isNativePlatform()) return false;
-  try {
-    const r = await LocalNotifications.requestPermissions();
-    return r.display === "granted";
+    return typeof window !== "undefined" && "Notification" in window;
   } catch {
     return false;
   }
 }
 
-const CHANNEL_ID = "digifuel-service";
+/** Service Worker terdaftar? (PWA terpasang / desktop) */
+async function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  try {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return null;
+    const reg = await navigator.serviceWorker.getRegistration();
+    return reg ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Platform notifikasi yang aktif: "native" | "web" | "unsupported"
+ */
+export async function getNotificationPlatform(): Promise<"native" | "web" | "unsupported"> {
+  if (isNativePlatform()) return "native";
+  if (hasWebNotificationSupport()) return "web";
+  return "unsupported";
+}
+
+/** Status izin notifikasi sistem: "granted" | "denied" | "prompt" | "unavailable". */
+export async function getNotificationPermissionStatus(): Promise<string> {
+  if (isNativePlatform()) {
+    try {
+      const r = await LocalNotifications.checkPermissions();
+      return r.display || "prompt";
+    } catch {
+      return "prompt";
+    }
+  }
+  if (hasWebNotificationSupport()) {
+    try {
+      return Notification.permission;
+    } catch {
+      return "prompt";
+    }
+  }
+  return "unavailable";
+}
+
+/** Minta izin notifikasi ke sistem (memunculkan dialog Android / browser). */
+export async function ensureNotificationPermission(): Promise<boolean> {
+  if (isNativePlatform()) {
+    try {
+      const r = await LocalNotifications.requestPermissions();
+      return r.display === "granted";
+    } catch {
+      return false;
+    }
+  }
+  if (hasWebNotificationSupport()) {
+    try {
+      if (Notification.permission === "granted") return true;
+      const result = await Notification.requestPermission();
+      return result === "granted";
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
 
 async function ensureChannel() {
+  if (!isNativePlatform()) return;
   try {
     await LocalNotifications.createChannel({
       id: CHANNEL_ID,
@@ -65,7 +116,9 @@ async function ensureChannel() {
   }
 }
 
-async function clearPendingServiceNotifications() {  try {
+async function clearPendingServiceNotifications() {
+  if (!isNativePlatform()) return;
+  try {
     const pending = await LocalNotifications.getPending();
     const ids = (pending.notifications || [])
       .map((n) => n.id)
@@ -78,6 +131,34 @@ async function clearPendingServiceNotifications() {  try {
   }
 }
 
+/** Tampilkan notifikasi web lewat Service Worker, atau API langsung sebagai cadangan. */
+async function showWebNotification(title: string, body: string): Promise<boolean> {
+  const reg = await getServiceWorkerRegistration();
+  const options: NotificationOptions = {
+    body,
+    icon: "/pwa-192x192.png",
+    badge: "/pwa-192x192.png",
+    tag: "digifuel-service",
+    renotify: true,
+    // keep untuk tetap tampil meski app tidak terbuka
+    requireInteraction: false,
+  } as NotificationOptions;
+  if (reg) {
+    try {
+      await reg.showNotification(title, options);
+      return true;
+    } catch {
+      // jatuh ke API langsung
+    }
+  }
+  try {
+    new Notification(title, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Jadwalkan ringkasan servis jatuh tempo. Anti-spam: maksimal 1x per hari
  * untuk daftar yang sama (fingerprint disimpan lokal).
@@ -87,15 +168,11 @@ export async function maybeNotifyServiceDue(
   currentKm: number
 ): Promise<"sent" | "skipped" | "disabled" | "denied"> {
   if (!getServiceNotifyEnabled()) return "disabled";
-  if (!isNativePlatform()) return "skipped";
   if (!services || services.length === 0) return "skipped";
 
-  try {
-    const perm = await LocalNotifications.checkPermissions();
-    if (perm.display !== "granted") return "denied";
-  } catch {
-    return "denied";
-  }
+  const platform = await getNotificationPlatform();
+  if (platform === "unsupported") return "skipped";
+  if (!(await ensureNotificationPermission())) return "denied";
 
   const overdue = services.filter((s) => s.nextServiceOdometer - currentKm <= 0);
   const near = services.filter((s) => {
@@ -125,30 +202,40 @@ export async function maybeNotifyServiceDue(
       ? `${names}${overdue.length + near.length > 3 ? ` +${overdue.length + near.length - 3} lainnya` : ""} — segera jadwalkan.`
       : `${names} — siap-siap jadwalkan servis.`;
 
+  let ok = false;
   try {
-    await ensureChannel();
-    await clearPendingServiceNotifications();
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: 1001,
-          title,
-          body,
-          schedule: { at: new Date(Date.now() + 5000) },
-          smallIcon: "ic_launcher",
-          channelId: CHANNEL_ID,
-        },
-      ],
-    });
+    if (isNativePlatform()) {
+      await ensureChannel();
+      await clearPendingServiceNotifications();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: 1001,
+            title,
+            body,
+            schedule: { at: new Date(Date.now() + 5000) },
+            smallIcon: "ic_launcher",
+            channelId: CHANNEL_ID,
+          },
+        ],
+      });
+      ok = true;
+    } else {
+      ok = await showWebNotification(title, body);
+    }
+  } catch {
+    ok = false;
+  }
+
+  if (ok) {
     try {
       localStorage.setItem(LAST_SENT_KEY, fingerprint);
     } catch {
       // abaikan
     }
     return "sent";
-  } catch {
-    return "skipped";
   }
+  return "skipped";
 }
 
 /** Hapus semua notifikasi servis terjadwal (dipakai saat fitur dimatikan). */
@@ -158,25 +245,35 @@ export async function cancelServiceNotifications() {
 
 /** Notifikasi tes: muncul ~3 detik setelah dipanggil. */
 export async function sendTestNotification(): Promise<boolean> {
-  if (!isNativePlatform()) return false;
-  const ok = await ensureNotificationPermission();
-  if (!ok) return false;
-  try {
-    await ensureChannel();
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          id: 1999,
-          title: "🔔 DigiFuel",
-          body: "Notifikasi pengingat servis aktif di perangkat ini.",
-          schedule: { at: new Date(Date.now() + 3000) },
-          smallIcon: "ic_launcher",
-          channelId: CHANNEL_ID,
-        },
-      ],
-    });
-    return true;
-  } catch {
-    return false;
+  const platform = await getNotificationPlatform();
+  if (platform === "unsupported") return false;
+  if (!(await ensureNotificationPermission())) return false;
+
+  if (isNativePlatform()) {
+    try {
+      await ensureChannel();
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: 1999,
+            title: "🔔 DigiFuel",
+            body: "Notifikasi pengingat servis aktif di perangkat ini.",
+            schedule: { at: new Date(Date.now() + 3000) },
+            smallIcon: "ic_launcher",
+            channelId: CHANNEL_ID,
+          },
+        ],
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
+
+  // Web: beri jeda singkat agar dialog izin sempat terlihat sebelum notifikasi
+  await new Promise((r) => setTimeout(r, 600));
+  return showWebNotification(
+    "🔔 DigiFuel",
+    "Notifikasi pengingat servis aktif di perangkat ini."
+  );
 }
