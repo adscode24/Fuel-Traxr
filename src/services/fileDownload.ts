@@ -26,11 +26,24 @@ async function shareNativeFile(file: ExportFile): Promise<boolean> {
   if (!isNativePlatform()) return false;
   try {
     const base64 = await blobToBase64(file.blob);
-    const saved = await Filesystem.writeFile({
-      path: file.fileName,
-      data: base64,
-      directory: Directory.Cache,
-    });
+    // Tulis ke Documents (storage permanen aplikasi, terlihat di Files
+    // > Android/data/com.digifuel.app/files) — BUKAN Cache yang bisa dihapus
+    // sistem atau tidak muncul di file manager.
+    let saved;
+    try {
+      saved = await Filesystem.writeFile({
+        path: file.fileName,
+        data: base64,
+        directory: Directory.Documents,
+        recursive: true,
+      });
+    } catch {
+      saved = await Filesystem.writeFile({
+        path: file.fileName,
+        data: base64,
+        directory: Directory.Cache,
+      });
+    }
     try {
       await Share.share({
         title: file.fileName,

@@ -44,7 +44,7 @@ interface Props {
   records: FuelRecord[];
   serviceHistory: ServiceHistoryEntry[];
   onResetAllData: () => void;
-  onExportDeviceBackup: () => void;
+  onExportDeviceBackup: () => void | Promise<void>;
   onImportDeviceBackup: (backup: Partial<DeviceBackupPayload>) => void;
   user: User | null;
   onOpenAuth?: (mode?: "login" | "register") => void;
@@ -56,6 +56,11 @@ interface Props {
   lastSyncedAt?: string | null;
   isSyncing?: boolean;
   onSyncNow?: () => void;
+  onUploadToCloud?: () => void;
+  onDownloadFromCloud?: () => void;
+  autoUpload?: boolean;
+  onToggleAutoUpload?: (next: boolean) => void;
+  cloudNewerAvailable?: boolean;
 }
 
 export const SettingsPage: React.FC<Props> = ({
@@ -77,6 +82,11 @@ export const SettingsPage: React.FC<Props> = ({
   lastSyncedAt = null,
   isSyncing = false,
   onSyncNow,
+  onUploadToCloud,
+  onDownloadFromCloud,
+  autoUpload = false,
+  onToggleAutoUpload,
+  cloudNewerAvailable = false,
 }) => {
   const { theme, setTheme } = useTheme();
   const { isInstalled } = usePWAInstall();
@@ -264,7 +274,9 @@ export const SettingsPage: React.FC<Props> = ({
                 </button>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
-                Setiap email punya vault terisolasi sendiri. Teman yang login dengan email & sandi yang sama akan melihat data yang sama dan setiap edit tersinkron otomatis.
+                Setiap email punya vault terisolasi sendiri. Perpindahan data antar
+                perangkat dilakukan <b>manual</b> lewat tombol Upload / Download di bawah
+                — jadi tidak ada perangkat yang diam-diam menimpa data lain.
                 {lastSyncedAt && (
                   <span className="block mt-0.5">
                     Terakhir sinkron: {new Date(lastSyncedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
@@ -278,16 +290,64 @@ export const SettingsPage: React.FC<Props> = ({
                 <span>{cloudError}</span>
               </div>
             )}
-            {onSyncNow && (
+            {cloudNewerAvailable && (
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Ada data yang lebih baru di Cloud (mis. dari HP lain). Tekan{" "}
+                  <b>Download dari Cloud</b> untuk mengambilnya ke perangkat ini.
+                </span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={onSyncNow}
+                onClick={onDownloadFromCloud}
                 disabled={isSyncing}
-                className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
+                className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
               >
-                {isSyncing ? "Menyinkron…" : "Sinkronkan Sekarang"}
+                {isSyncing ? "Proses…" : "Download dari Cloud"}
               </button>
-            )}
+              <button
+                type="button"
+                onClick={onUploadToCloud}
+                disabled={isSyncing}
+                className="py-2.5 px-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold shadow-xs transition active:scale-98 cursor-pointer"
+              >
+                {isSyncing ? "Proses…" : "Upload ke Cloud"}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">
+                  Unggah otomatis setiap perubahan
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Nonaktifkan bila ingin memilih arah manual
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={autoUpload}
+                aria-label="Unggah otomatis setiap perubahan"
+                onClick={() => onToggleAutoUpload(!autoUpload)}
+                className={`w-11 h-6 rounded-full transition p-0.5 flex items-center shrink-0 cursor-pointer ${
+                  autoUpload ? "bg-blue-600 justify-end" : "bg-slate-300 dark:bg-slate-700 justify-start"
+                }`}
+              >
+                <span className="w-5 h-5 rounded-full bg-white shadow-xs" />
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              <b>Download</b> = data Cloud menggantikan data perangkat ini.
+              <b> Upload</b> = data perangkat ini menggantikan data Cloud.
+              Unggah otomatisdefault nonaktif agar perangkat dengan data lama tidak
+              menimpa data cloud.
+            </p>
           </div>
         ) : (
           <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#111724] border border-slate-200/90 dark:border-slate-800/90 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -335,7 +395,10 @@ export const SettingsPage: React.FC<Props> = ({
             <span>Keamanan &amp; Privasi Data Lokal</span>
           </div>
           <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
-            Cache lokal offline-first untuk kecepatan + <b>Cloud Vault</b> untuk sinkron multi-perangkat saat login email. Tanpa login, data 100% privat hanya di perangkat ini. Saat login, setiap edit otomatis tersinkron ke semua perangkat dengan akun yang sama.
+            Cache lokal offline-first untuk kecepatan + <b>Cloud Vault</b> untuk transfer
+            multi-perangkat saat login email. Tanpa login, data 100% privat hanya di
+            perangkat ini. Setelah login, pindahkan data secara sadar lewat tombol{" "}
+            <b>Upload ke Cloud</b> atau <b>Download dari Cloud</b>.
           </p>
 
           {/* Quick Metrics */}

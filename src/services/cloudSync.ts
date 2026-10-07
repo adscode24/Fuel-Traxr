@@ -201,9 +201,32 @@ export async function pushVault(
   }
 }
 
+/** Ambil vault sekali dari cloud (untuk tombol Download dari Cloud). */
+export async function pullVault(user: User): Promise<CloudVault | null> {
+  try {
+    const snap = await getDoc(vaultDocRef(user.uid));
+    if (!snap.exists()) return null;
+    const data = snap.data() as Partial<CloudVault>;
+    return {
+      vehicles: (data.vehicles as Vehicle[]) ?? [],
+      fuelRecords: (data.fuelRecords as FuelRecord[]) ?? [],
+      services: (data.services as ServiceItem[]) ?? [],
+      serviceHistory: (data.serviceHistory as ServiceHistoryEntry[]) ?? [],
+      ownerEmail: (data.ownerEmail as string | null) ?? user.email ?? null,
+      displayName: (data.displayName as string | null) ?? user.displayName ?? null,
+      vaultCode: (data.vaultCode as string) ?? "",
+      updatedAt: (data.updatedAt as string) ?? new Date().toISOString(),
+      schemaVersion: (data.schemaVersion as number) ?? VAULT_SCHEMA_VERSION,
+    };
+  } catch (err) {
+    throw toFriendlyError(err);
+  }
+}
+
 /**
- * Listener realtime lintas perangkat. Setiap edit dari HP/laptop lain
- * langsung memicu onData di perangkat ini.
+ * Listener realtime lintas perangkat. Perubahannya hanya memberi TANDA
+ * "ada data lebih baru di cloud" — tidak menimpa data lokal sendiri.
+ * Pengambilan data hanya terjadi lewat tombol Download dari Cloud.
  */
 export function subscribeVault(
   user: User,

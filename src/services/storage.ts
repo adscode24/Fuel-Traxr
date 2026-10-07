@@ -1,4 +1,6 @@
 import { Vehicle, FuelRecord, ServiceItem, ServiceHistoryEntry, MonthlySummary } from "../types";
+import { downloadExportFile } from "./fileDownload";
+import type { ExportFile } from "./exportService";
 
 const VEHICLES_STORAGE_KEY = "bbm_app_vehicles_v1";
 const FUEL_RECORDS_KEY = "bbm_app_records_v1";
@@ -339,12 +341,12 @@ export interface DeviceBackupPayload {
  * Downloads a complete JSON backup file of all vehicles, fuel records, services,
  * and service history directly to the user's device memory.
  */
-export function exportDeviceBackup(
+export async function exportDeviceBackup(
   vehicles: Vehicle[],
   fuelRecords: FuelRecord[],
   services: ServiceItem[],
   serviceHistory: ServiceHistoryEntry[]
-): void {
+): Promise<"shared" | "downloaded"> {
   const payload: DeviceBackupPayload = {
     app: "DigiFuel",
     version: 2,
@@ -358,19 +360,19 @@ export function exportDeviceBackup(
 
   const jsonStr = JSON.stringify(payload, null, 2);
   const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
   const now = new Date();
   const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
     now.getDate()
   ).padStart(2, "0")}`;
+  const fileName = `digifuel_backup_${dateStr}.json`;
 
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `digifuel_backup_${dateStr}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  // Anchor `download` tidak berfungsi di WebView Android native, sehingga
+  // file "tidak pernah sampai" ke folder Download. Pakai jalur yang sama
+  // dengan ekspor PDF/Excel: tulis ke penyimpanan aplikasi (Documents,
+  // bukan Cache yang bisa dihapus sistem) lalu buka dialog Share agar user
+  // bisa memindahkannya ke folder Download.
+  const file: ExportFile = { blob, fileName, mimeType: "application/json" };
+  return downloadExportFile(file);
 }
 
 /**

@@ -27,6 +27,7 @@ import { isCloudCapableUid } from "./services/firebase";
 import {
   ensureUserVault,
   pushVault,
+  pullVault,
   subscribeVault,
   CloudSyncError,
 } from "./services/cloudSync";
@@ -108,6 +109,32 @@ export function App() {
   const lastCloudUpdatedAtRef = useRef<string>("");
   const lastPushedAtRef = useRef<string>("");
   const pushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Arah sinkronisasi eksplisit: JANGAN pernah menimpa cloud dengan data lokal
+  // yang lebih lama tanpa persetujuan pengguna.
+  const [autoUpload, setAutoUpload] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("digifuel_autoupload") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [cloudNewerAvailable, setCloudNewerAvailable] = useState(false);
+  const lastPulledAtKey = "digifuel_last_pulled_at";
+  const getLastPulledAt = () => {
+    try {
+      return localStorage.getItem(`${lastPulledAtKey}_${user?.uid || "guest"}`) || "";
+    } catch {
+      return "";
+    }
+  };
+  const setLastPulledAt = (iso: string) => {
+    try {
+      localStorage.setItem(`${lastPulledAtKey}_${user?.uid || "guest"}`, iso);
+    } catch {
+      // abaikan
+    }
+  };
 
   // Show temporary toast notification
   const showToast = (msg: string) => {
@@ -241,6 +268,17 @@ export function App() {
 
         setCloudStatus(navigator.onLine ? "synced" : "offline");
 
+        // Petakan: apakah cloud lebih baru dari最后一次 sinkron tarikan lokal?
+        const lastPulled = getLastPulledAt();
+        if (!lastPulled && vault.updatedAt) {
+          setLastPulledAt(vault.updatedAt);
+          setCloudNewerAvailable(false);
+        } else if (vault.updatedAt && vault.updatedAt > lastPulled) {
+          setCloudNewerAvailable(true);
+        } else {
+          setCloudNewerAvailable(false);
+        }
+
         unsubscribe = subscribeVault(
           user,
           (remote) => {
@@ -255,30 +293,14 @@ export function App() {
               return;
             }
             if (remote.updatedAt && remote.updatedAt === lastCloudUpdatedAtRef.current) return;
-            // Ada edit lokal yang belum terkirim -> menangkan lokal, push akan jalan
-            if (pushTimerRef.current) return;
-            applyingCloudRef.current = true;
-            justAppliedRef.current = true;
+            // PERINGATAN: jangan pernah timpa data lokal secara diam-diam.
+            // Bila cloud berubah, tampilkan notifikasi "ada data lebih baru di
+            // cloud" dan biarkan pengguna memilih Download atau Upload.
             lastCloudUpdatedAtRef.current = remote.updatedAt || "";
-            setVehicles(remote.vehicles);
-            saveStoredVehicles(remote.vehicles, user.uid);
-            setActiveVehicleId((prev) => {
-              if (prev && remote.vehicles.some((v) => v.id === prev)) return prev;
-              return remote.vehicles[0]?.id || "";
-            });
-            const calcRemote = recalculateRecords(remote.fuelRecords);
-            setRecords(calcRemote);
-            saveStoredFuelRecords(calcRemote, user.uid);
-            setServices(remote.services);
-            saveStoredServices(remote.services, user.uid);
-            setServiceHistory(remote.serviceHistory);
-            saveStoredServiceHistory(remote.serviceHistory, user.uid);
             setLastSyncedAt(remote.updatedAt || null);
+            setCloudNewerAvailable(true);
             setCloudStatus(navigator.onLine ? "synced" : "offline");
             setCloudError(null);
-            setTimeout(() => {
-              applyingCloudRef.current = false;
-            }, 0);
           },
           (err: CloudSyncError) => {
             if (cancelled) return;
@@ -315,10 +337,12 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Cloud Vault: dorong setiap perubahan lokal (debounced) agar semua perangkat sinkron.
+  // Cloud Vault: dorong perubahan lokal hanya bila auto-upload diaktifkan.
+  // Default NON-AKTIF agar perangkat dengan data lama tidak menimpa cloud.
   useEffect(() => {
     if (!user || !isCloudCapableUid(user.uid)) return;
     if (!vaultCode) return;
+    if (!autoUpload) return;
     if (applyingCloudRef.current || justAppliedRef.current) {
       justAppliedRef.current = false;
       return;
@@ -346,6 +370,8 @@ export function App() {
         lastPushedAtRef.current = updatedAt;
         lastCloudUpdatedAtRef.current = updatedAt;
         setLastSyncedAt(updatedAt);
+        setLastPulledAt(updatedAt);
+        setCloudNewerAvailable(false);
         setCloudStatus("synced");
         setCloudError(null);
       } catch (err: unknown) {
@@ -364,10 +390,10 @@ export function App() {
     return () => {
       if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     };
-  }, [vehicles, records, services, serviceHistory, user, vaultCode]);
+  }, [vehicles, records, services, serviceHistory, user, vaultCode, autoUpload]);
 
-  // Sinkron manual (tombol di Settings)
-  const handleSyncNow = useCallback(async () => {
+  // Upload manual: data lokal PENGGANTI cloud (tombol "Upload ke Cloud")
+  const handleUploadToCloud = useCallback(async () => {
     if (!user || !isCloudCapableUid(user.uid) || !vaultCode) return;
     if (pushTimerRef.current) {
       clearTimeout(pushTimerRef.current);
@@ -375,7 +401,7 @@ export function App() {
     }
     if (!navigator.onLine) {
       setCloudStatus("offline");
-      showToast("Offline — data aman di perangkat, akan tersinkron saat online.");
+      showToast("Offline — tidak bisa upload ke cloud.");
       return;
     }
     setIsSyncing(true);
@@ -390,30 +416,107 @@ export function App() {
       lastPushedAtRef.current = updatedAt;
       lastCloudUpdatedAtRef.current = updatedAt;
       setLastSyncedAt(updatedAt);
+      setLastPulledAt(updatedAt);
       setCloudStatus("synced");
       setCloudError(null);
-      showToast("Cloud tersinkron — semua perangkat kini sama.");
+      setCloudNewerAvailable(false);
+      showToast("Data lokal terupload ke Cloud.");
     } catch (err: unknown) {
       setCloudStatus("error");
-      setCloudError((err as Error)?.message || "Gagal sinkron.");
-      showToast("Gagal sinkron cloud. Coba lagi saat online.");
+      setCloudError((err as Error)?.message || "Gagal upload.");
+      showToast("Gagal upload ke cloud.");
     } finally {
       setIsSyncing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, vaultCode, vehicles, records, services, serviceHistory]);
 
-  // Pull-to-refresh (mobile): sinkron cloud bila login, else muat ulang lokal
+  // Download manual: cloud PENGGANTI data lokal (tombol "Download dari Cloud")
+  const handleDownloadFromCloud = useCallback(async () => {
+    if (!user || !isCloudCapableUid(user.uid)) return;
+    if (!navigator.onLine) {
+      setCloudStatus("offline");
+      showToast("Offline — tidak bisa download dari cloud.");
+      return;
+    }
+    setIsSyncing(true);
+    setCloudStatus("syncing");
+    try {
+      const remote = await pullVault(user);
+      if (!remote) {
+        setCloudStatus("synced");
+        showToast("Belum ada data di cloud untuk akun ini.");
+        return;
+      }
+      applyingCloudRef.current = true;
+      justAppliedRef.current = true;
+      lastCloudUpdatedAtRef.current = remote.updatedAt || "";
+      setVehicles(remote.vehicles);
+      saveStoredVehicles(remote.vehicles, user.uid);
+      setActiveVehicleId((prev) => {
+        if (prev && remote.vehicles.some((v) => v.id === prev)) return prev;
+        return remote.vehicles[0]?.id || "";
+      });
+      const calcRemote = recalculateRecords(remote.fuelRecords);
+      setRecords(calcRemote);
+      saveStoredFuelRecords(calcRemote, user.uid);
+      setServices(remote.services);
+      saveStoredServices(remote.services, user.uid);
+      setServiceHistory(remote.serviceHistory);
+      saveStoredServiceHistory(remote.serviceHistory, user.uid);
+      setLastSyncedAt(remote.updatedAt || null);
+      setLastPulledAt(remote.updatedAt || new Date().toISOString());
+      setCloudStatus("synced");
+      setCloudError(null);
+      setCloudNewerAvailable(false);
+      setTimeout(() => {
+        applyingCloudRef.current = false;
+      }, 0);
+      showToast("Data cloud terunduh ke perangkat ini.");
+    } catch (err: unknown) {
+      setCloudStatus("error");
+      setCloudError((err as Error)?.message || "Gagal download.");
+      showToast("Gagal download dari cloud.");
+    } finally {
+      setIsSyncing(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const handleToggleAutoUpload = useCallback((next: boolean) => {
+    setAutoUpload(next);
+    try {
+      localStorage.setItem("digifuel_autoupload", next ? "1" : "0");
+    } catch {
+      // abaikan
+    }
+  }, []);
+
+  // Pull-to-refresh (mobile): segarkan status cloud bila login, else muat ulang lokal
   const handleRefresh = useCallback(async () => {
     if (user && isCloudCapableUid(user.uid)) {
-      await handleSyncNow();
+      await pullVault(user)
+        .then((remote) => {
+          if (remote?.updatedAt) {
+            setLastSyncedAt(remote.updatedAt);
+            setCloudNewerAvailable(remote.updatedAt > getLastPulledAt());
+          }
+        })
+        .catch(() => {
+          /* abaikan */
+        });
+      showToast(
+        cloudNewerAvailable
+          ? "Ada data lebih baru di cloud — tekan Download dari Cloud."
+          : "Status cloud diperbarui."
+      );
       return;
     }
     setVehicles(getStoredVehicles(null));
     setRecords(getStoredFuelRecords(null));
     setServices(getStoredServices(null));
     setServiceHistory(getStoredServiceHistory(null));
-  }, [user, handleSyncNow]);
+  }, [user, cloudNewerAvailable]);
 
   // Compute active vehicle object
   const activeVehicle = useMemo(() => {
@@ -595,10 +698,18 @@ export function App() {
     showToast(`Data kendaraan "${v.name}" diperbarui.`);
   };
 
-  // Device Backup: Export JSON directly to device
-  const handleExportDeviceBackup = () => {
-    exportDeviceBackup(vehicles, records, services, serviceHistory);
-    showToast("Berkas cadangan (.json) berhasil diunduh ke perangkat Anda!");
+  // Device Backup: Export JSON ke perangkat (native: Documents + dialog Share)
+  const handleExportDeviceBackup = async () => {
+    try {
+      const how = await exportDeviceBackup(vehicles, records, services, serviceHistory);
+      showToast(
+        how === "shared"
+          ? "Berkas .json tersimpan — pilih “Simpan ke Files/Download” di dialog."
+          : "Berkas cadangan .json berhasil diunduh."
+      );
+    } catch (err: unknown) {
+      showToast(`Gagal menyimpan cadangan: ${(err as Error)?.message || "tidak diketahui"}`);
+    }
   };
 
   // Device Backup: Import JSON file from device
@@ -842,7 +953,12 @@ export function App() {
             cloudError={cloudError}
             lastSyncedAt={lastSyncedAt}
             isSyncing={isSyncing}
-            onSyncNow={handleSyncNow}
+            onSyncNow={handleUploadToCloud}
+            onUploadToCloud={handleUploadToCloud}
+            onDownloadFromCloud={handleDownloadFromCloud}
+            autoUpload={autoUpload}
+            onToggleAutoUpload={handleToggleAutoUpload}
+            cloudNewerAvailable={cloudNewerAvailable}
           />
         )}
         </PullToRefresh>
